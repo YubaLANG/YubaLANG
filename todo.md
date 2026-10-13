@@ -37,11 +37,11 @@ item before its dependencies are understood.
 
 ### Basic language server
 
-- [ ] Implement a lightweight LSP with document open/change/close support.
-- [ ] Report syntax diagnostics with source ranges.
-- [ ] Support jump-to-definition for variables and functions.
-- [ ] Provide hover documentation for language syntax and built-ins.
-- [ ] Document editor setup and test the server with a small example project.
+- [x] Implement a lightweight LSP with document open/change/close support.
+- [x] Report syntax diagnostics with source ranges.
+- [x] Support jump-to-definition for variables and functions.
+- [x] Provide hover documentation for language syntax and built-ins.
+- [x] Document editor setup and test the server with a small example project.
 
 ### Official formatter
 
@@ -67,6 +67,19 @@ item before its dependencies are understood.
   requirements, and changed dependency revisions with actionable errors.
 - [ ] Document a minimal project and a project using both path and Git
   dependencies.
+
+### Library and import support
+
+- [ ] Define source-level import syntax so programs can import and use library
+  code, including a clear rule for namespacing and exported symbols.
+- [ ] Implement loading and execution of imported local modules in YubaLANG
+  programs, with useful errors for missing modules and import cycles.
+- [ ] Connect source imports to dependencies installed or resolved by the
+  package manager, including version/revision consistency with the lockfile.
+- [ ] Add package-manager commands to add, remove, install, update, and list
+  libraries while keeping the manifest and lockfile consistent.
+- [ ] Test and document a project that imports a local library and a managed
+  third-party library.
 
 ## 3. Developer diagnostics and error quality
 
