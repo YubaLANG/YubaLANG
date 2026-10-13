@@ -10,7 +10,7 @@ that would be expensive to maintain before the user base grows.
 
 | Priority | Feature | Scope | Early-user value |
 | --- | --- | --- | --- |
-| P0 | Contextual compiler/runtime errors | Low | Very high |
+| P0 | Contextual interpreter/runtime errors | Low | Very high |
 | P0 | Official `fmt` formatter | Low–medium | High |
 | P0 | Package manifest and Git/path dependency resolver | Medium | Critical |
 | P1 | Basic language server (LSP) | Medium | High |
@@ -83,17 +83,17 @@ item before its dependencies are understood.
 
 ## 3. Developer diagnostics and error quality
 
-- [ ] Include source file, line, and column in syntax and runtime diagnostics.
-- [ ] Highlight the relevant source span and show a concise source snippet.
-- [ ] Explain errors in human-readable language and include a specific,
+- [x] Include source file, line, and column in syntax and runtime diagnostics.
+- [x] Highlight the relevant source span and show a concise source snippet.
+- [x] Explain errors in human-readable language and include a specific,
   actionable hint where one is known.
-- [ ] Add “Did you mean?” suggestions for undefined variables and misspelled
+- [x] Add “Did you mean?” suggestions for undefined variables and misspelled
   function names.
 - [ ] Add typo suggestions for missing imports when import support is
   introduced.
-- [ ] Keep diagnostics free of internal stack traces for ordinary source
-  errors; preserve useful details for developer/debug mode.
-- [ ] Add regression tests for error locations, highlighted spans, suggestions,
+- [x] Keep diagnostics free of internal stack traces for ordinary source
+  errors.
+- [x] Add regression tests for error locations, highlighted spans, suggestions,
   and diagnostic output.
 
 ## 4. Basic testing and interoperability

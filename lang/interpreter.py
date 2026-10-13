@@ -5,6 +5,7 @@ import sys
 from typing import Any
 
 from .commands import evaluate_condition, execute_command
+from .diagnostics import format_diagnostic
 from .runtime import Runtime, TYPES, UserFunction
 from .string_builtins import resolve
 
@@ -65,7 +66,12 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
     }
     runtime.scopes.append(local_scope)
     try:
-        execute_lines(function.body, runtime)
+        execute_lines(
+            function.body,
+            runtime,
+            function.source_name,
+            function.line_numbers or None,
+        )
     except ReturnException as result:
         return result.value if result.has_value else None
     finally:
@@ -96,95 +102,128 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
         runtime.update_var(destination, target["type"], result)
 
 
-def execute_lines(lines: list[str], runtime: Runtime | None = None) -> None:
+def execute_lines(
+    lines: list[str],
+    runtime: Runtime | None = None,
+    source_name: str = "<memory>",
+    line_numbers: list[int] | None = None,
+) -> None:
     runtime = runtime or Runtime()
+    if line_numbers is None:
+        line_numbers = list(range(1, len(lines) + 1))
+    if len(line_numbers) != len(lines):
+        raise ValueError("Source line mapping must match the number of program lines.")
+
     index = 0
     while index < len(lines):
-        raw_line = lines[index].strip()
+        source_line = lines[index]
+        raw_line = source_line.strip()
+        statement_line = line_numbers[index]
         if not raw_line or raw_line.startswith("#"):
             index += 1
             continue
 
-        parts = _split(raw_line)
-        command = parts[0] if parts else ""
-        if command == "return":
-            value = resolve(" ".join(parts[1:]), runtime) if len(parts) > 1 else None
-            raise ReturnException(value, has_value=len(parts) > 1)
-        if command == "break":
-            raise BreakException()
-        if command == "continue":
-            raise ContinueException()
+        try:
+            parts = _split(raw_line)
+            command = parts[0] if parts else ""
+            if command == "return":
+                value = resolve(" ".join(parts[1:]), runtime) if len(parts) > 1 else None
+                raise ReturnException(value, has_value=len(parts) > 1)
+            if command == "break":
+                raise BreakException()
+            if command == "continue":
+                raise ContinueException()
 
-        if command == "if":
-            branches: list[tuple[str, list[str]]] = [(parts[1], [])]
-            depth = 1
-            index += 1
-            while index < len(lines):
-                nested_line = lines[index].strip()
-                nested_parts = _split(nested_line) if nested_line else []
-                nested_command = nested_parts[0] if nested_parts else ""
-                if nested_command == "if":
-                    depth += 1
-                    branches[-1][1].append(lines[index])
-                elif nested_command == "endif":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                    branches[-1][1].append(lines[index])
-                elif depth == 1 and nested_command == "elseif":
-                    if len(nested_parts) != 2:
-                        raise SyntaxError("Usage: elseif <condition>")
-                    branches.append((nested_parts[1], []))
-                elif depth == 1 and nested_command == "else":
-                    branches.append(("true", []))
+            if command == "if":
+                if len(parts) != 2:
+                    raise SyntaxError("Usage: if <condition>")
+                branches: list[tuple[str, list[str], list[int]]] = [
+                    (parts[1], [], [])
+                ]
+                depth = 1
+                index += 1
+                while index < len(lines):
+                    nested_source_line = lines[index]
+                    nested_line = nested_source_line.strip()
+                    try:
+                        nested_parts = _split(nested_line) if nested_line else []
+                    except SyntaxError as error:
+                        print(format_diagnostic(
+                            error, source_name, line_numbers[index], nested_source_line, runtime
+                        ))
+                        raise SystemExit(1) from error
+                    nested_command = nested_parts[0] if nested_parts else ""
+                    if nested_command == "if":
+                        depth += 1
+                        branches[-1][1].append(nested_source_line)
+                        branches[-1][2].append(line_numbers[index])
+                    elif nested_command == "endif":
+                        depth -= 1
+                        if depth == 0:
+                            break
+                        branches[-1][1].append(nested_source_line)
+                        branches[-1][2].append(line_numbers[index])
+                    elif depth == 1 and nested_command == "elseif":
+                        if len(nested_parts) != 2:
+                            error = SyntaxError("Usage: elseif <condition>")
+                            print(format_diagnostic(
+                                error, source_name, line_numbers[index],
+                                nested_source_line, runtime,
+                            ))
+                            raise SystemExit(1) from error
+                        branches.append((nested_parts[1], [], []))
+                    elif depth == 1 and nested_command == "else":
+                        branches.append(("true", [], []))
+                    else:
+                        branches[-1][1].append(nested_source_line)
+                        branches[-1][2].append(line_numbers[index])
+                    index += 1
                 else:
-                    branches[-1][1].append(lines[index])
+                    raise SyntaxError("Missing endif for if block.")
+
+                for condition, body, body_line_numbers in branches:
+                    if evaluate_condition(condition, runtime):
+                        execute_lines(body, runtime, source_name, body_line_numbers)
+                        break
+
+            elif command == "func" and len(parts) >= 3 and parts[1] == "define":
+                function_name = parts[2]
+                parameters = parts[3:]
+                if len(set(parameters)) != len(parameters):
+                    raise SyntaxError(f"Function '{function_name}' has duplicate parameters.")
+                body = []
+                body_line_numbers = []
                 index += 1
-            else:
-                raise SyntaxError("Missing endif for if block.")
+                while index < len(lines) and lines[index].strip() != "endfunc":
+                    body.append(lines[index])
+                    body_line_numbers.append(line_numbers[index])
+                    index += 1
+                if index == len(lines):
+                    raise SyntaxError(f"Missing endfunc for function '{function_name}'.")
+                runtime.functions[function_name] = UserFunction(
+                    parameters, body, source_name, body_line_numbers
+                )
 
-            for condition, body in branches:
-                if evaluate_condition(condition, runtime):
-                    execute_lines(body, runtime)
-                    break
-
-        elif command == "func" and len(parts) >= 3 and parts[1] == "define":
-            function_name = parts[2]
-            parameters = parts[3:]
-            if len(set(parameters)) != len(parameters):
-                raise SyntaxError(f"Function '{function_name}' has duplicate parameters.")
-            body = []
-            index += 1
-            while index < len(lines) and lines[index].strip() != "endfunc":
-                body.append(lines[index])
-                index += 1
-            if index == len(lines):
-                raise SyntaxError(f"Missing endfunc for function '{function_name}'.")
-            runtime.functions[function_name] = UserFunction(parameters, body)
-
-        elif command == "func" and len(parts) >= 3 and parts[1] == "call":
-            try:
+            elif command == "func" and len(parts) >= 3 and parts[1] == "call":
                 _execute_function_call(parts, runtime)
-            except (SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError) as error:
-                print(f"Error processing command: {error}")
-                raise SystemExit(1) from error
 
-        elif command == "loop" and len(parts) == 3 and parts[1] in ("for", "while"):
-            loop_type, condition = parts[1], parts[2]
-            body = []
-            index += 1
-            while index < len(lines) and lines[index].strip() != "endloop":
-                body.append(lines[index])
+            elif command == "loop" and len(parts) == 3 and parts[1] in ("for", "while"):
+                loop_type, condition = parts[1], parts[2]
+                body = []
+                body_line_numbers = []
                 index += 1
-            if index == len(lines):
-                raise SyntaxError("Missing endloop for loop.")
-            try:
+                while index < len(lines) and lines[index].strip() != "endloop":
+                    body.append(lines[index])
+                    body_line_numbers.append(line_numbers[index])
+                    index += 1
+                if index == len(lines):
+                    raise SyntaxError("Missing endloop for loop.")
                 if loop_type == "for":
                     value = runtime.get_var(condition)
                     count = value["value"] if value else int(condition)
                     for _ in range(count):
                         try:
-                            execute_lines(body, runtime)
+                            execute_lines(body, runtime, source_name, body_line_numbers)
                         except ContinueException:
                             continue
                         except BreakException:
@@ -192,21 +231,20 @@ def execute_lines(lines: list[str], runtime: Runtime | None = None) -> None:
                 else:
                     while evaluate_condition(condition, runtime):
                         try:
-                            execute_lines(body, runtime)
+                            execute_lines(body, runtime, source_name, body_line_numbers)
                         except ContinueException:
                             continue
                         except BreakException:
                             break
-            except (SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError) as error:
-                print(f"Error executing loop: {error}")
-                raise SystemExit(1) from error
 
-        else:
-            try:
+            else:
                 interpret(raw_line, runtime)
-            except (SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError) as error:
-                print(f"Error processing command: {error} (line {index + 1}: {raw_line})")
-                raise SystemExit(1) from error
+        except (
+            SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError,
+            KeyError, AttributeError, OverflowError, OSError, EOFError,
+        ) as error:
+            print(format_diagnostic(error, source_name, statement_line, source_line, runtime))
+            raise SystemExit(1) from error
         index += 1
 
 
@@ -215,7 +253,7 @@ def run_file(filename: str) -> None:
         lines = source_file.readlines()
     runtime = Runtime()
     try:
-        execute_lines(lines, runtime)
+        execute_lines(lines, runtime, filename)
     except ReturnException:
         pass
     finally:

@@ -22,6 +22,8 @@ TYPES = {
 class UserFunction:
     parameters: list[str]
     body: list[str]
+    source_name: str = "<memory>"
+    line_numbers: list[int] = field(default_factory=list)
 
 
 @dataclass

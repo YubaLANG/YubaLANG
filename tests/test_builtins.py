@@ -124,7 +124,8 @@ class BuiltinCommandTests(unittest.TestCase):
                 """
             )
         self.assertIn("Variable 'missing' is not defined.", output.getvalue())
-        self.assertIn("line 2: text output missing", output.getvalue())
+        self.assertIn("line 2:", output.getvalue())
+        self.assertIn("text output missing", output.getvalue())
 
     def test_existing_collection_and_utility_commands(self) -> None:
         runtime = self.run_program(
