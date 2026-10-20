@@ -40,7 +40,8 @@ def _format_paths(paths: list[str], check: bool) -> int:
             print(f"fmt: {path}: {error}", file=sys.stderr)
             return 1
 
-        if source != formatted:
+        normalized_source = source.replace("\r\n", "\n").replace("\r", "\n")
+        if normalized_source != formatted:
             changed = True
             if check:
                 print(f"Would reformat {path}")

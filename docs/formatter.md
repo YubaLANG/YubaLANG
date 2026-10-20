@@ -7,7 +7,8 @@ The built-in `fmt` command formats `.hl` files with a consistent style:
   with the block's opening statement.
 - Existing blank lines and comments are retained, with indentation normalized.
 - Statement text, including strings and inline comments, is otherwise
-  preserved. Output uses UTF-8 and a single final LF newline.
+  preserved. Write mode uses UTF-8 and a single final LF newline; check mode
+  ignores the difference between LF and CRLF line endings.
 
 Format one file or all `.hl` files under a directory recursively:
 

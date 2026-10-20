@@ -47,7 +47,7 @@ class FormatterTests(unittest.TestCase):
         with self.assertRaisesRegex(FormatError, r"line 1: endif without a matching block"):
             format_source("endif\n")
 
-    def test_check_requires_lf_line_endings(self):
+    def test_check_accepts_windows_line_endings(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "sample.hl"
             with source.open("w", encoding="utf-8", newline="") as output_file:
@@ -58,8 +58,8 @@ class FormatterTests(unittest.TestCase):
                 capture_output=True, text=True, check=False,
             )
 
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("Would reformat", result.stdout)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("All files are formatted.", result.stdout)
 
     def test_cli_check_and_write_modes(self):
         with tempfile.TemporaryDirectory() as directory:
