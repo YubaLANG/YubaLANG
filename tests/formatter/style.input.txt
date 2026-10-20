@@ -1,0 +1,15 @@
+# Comments, strings, collections, and nested control flow.
+define var message: string = "hash # stays in the string" # inline comment
+define var values: list = [1, 2, {"name": "Yuba"}]
+func define show_items items
+if true
+text output message
+loop for 2
+text output items
+endloop
+else
+# Keep this comment in the block.
+text output "not used"
+endif
+endfunc
+func call show_items values

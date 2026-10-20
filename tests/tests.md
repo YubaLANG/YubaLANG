@@ -1,6 +1,6 @@
 ﻿# YubaLANG User Tests
 
-These tests verify that the core YubaLANG 1.0 features work from the perspective of someone learning the language for the first time.
+These tests verify core YubaLANG language features from the perspective of someone learning the language for the first time.
 
 ---
 

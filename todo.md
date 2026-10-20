@@ -45,12 +45,12 @@ item before its dependencies are understood.
 
 ### Official formatter
 
-- [ ] Specify a consistent formatting style for YubaLANG source files.
-- [ ] Implement a formatter with a check mode and a write mode.
-- [ ] Keep formatting stable and avoid changing program semantics.
-- [ ] Add formatter fixtures covering comments, strings, collections,
+- [x] Specify a consistent formatting style for YubaLANG source files.
+- [x] Implement a formatter with a check mode and a write mode.
+- [x] Keep formatting stable and avoid changing program semantics.
+- [x] Add formatter fixtures covering comments, strings, collections,
   indentation, and nested control flow.
-- [ ] Document how to format a project and integrate formatting into CI.
+- [x] Document how to format a project and integrate formatting into CI.
 
 ## 2. Package management and dependency locking
 
@@ -119,11 +119,6 @@ item before its dependencies are understood.
   signatures, and error propagation.
 - [ ] Document platform/compiler requirements and clearly state unsupported
   ABI features.
-
-## Out of scope for 1.2
-
-- [ ] Defer fuzzing infrastructure, a complex refactoring-capable LSP, and
-  garbage-collector redesign to a later release (1.3 or beyond).
 
 ## Release checks
 

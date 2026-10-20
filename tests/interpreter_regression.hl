@@ -1,4 +1,4 @@
-﻿# YubaLANG 1.1 Interpreter Regression Program
+﻿# YubaLANG 1.2 Interpreter Regression Program
 # Copyleft 🄯 2026 YubaLANG Technologies
 
 # --------------------------------
@@ -316,12 +316,12 @@ define var do_early_exit: bool = true
 
 func define early_bird
     text output "Starting the function..."
-    
+
     if do_early_exit
         text output "Exiting early!"
         return
     endif
-    
+
     text output "You will not see this text because we returned!"
 endfunc
 
@@ -371,7 +371,7 @@ loop for 4
         continue
         text output "ERROR: This continue line should never print!"
     endif
-    
+
     text output " -> Executing full iteration!"
     define var skip_it: bool = true
 endloop

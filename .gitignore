@@ -1,3 +1,4 @@
 .venv/
 temp_test.txt
 tests/interpreter_regression.tmp
+AGENTS.md
