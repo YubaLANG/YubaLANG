@@ -7,6 +7,7 @@ from pathlib import Path
 from lang.formatter import FormatError, format_source
 from lang.interpreter import run_file
 from lang.lsp import serve
+from lang.test_runner import run_tests
 
 
 def _format_paths(paths: list[str], check: bool) -> int:
@@ -74,8 +75,19 @@ def main():
             sys.exit(2)
         sys.exit(_format_paths(arguments, check))
 
+    if len(sys.argv) >= 2 and sys.argv[1] == "test":
+        if len(sys.argv) > 3:
+            print("Usage: py YubaLANG.py test [test-file.hl|test-directory]", file=sys.stderr)
+            sys.exit(2)
+        test_path = Path(sys.argv[2]) if len(sys.argv) == 3 else Path("tests/cases")
+        sys.exit(run_tests(test_path))
+
     if len(sys.argv) != 2:
-        print("Usage: py YubaLANG.py <file.hl> | --lsp | fmt [--check|--write] <file.hl|directory>...")
+        print(
+            "Usage: py YubaLANG.py <file.hl> | --lsp | "
+            "fmt [--check|--write] <file.hl|directory>... | "
+            "test [test-file.hl|test-directory]"
+        )
         sys.exit(1)
 
     filename = sys.argv[1]

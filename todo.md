@@ -25,12 +25,12 @@ item before its dependencies are understood.
 
 ### Cross-platform toolchain installers
 
-- [ ] Define and document a clean installation layout, PATH setup, and
+- [x] Define and document a clean installation layout, PATH setup, and
   uninstall/update behavior.
-- [ ] Add a Linux installer for the compiler and runtime.
-- [ ] Add a macOS installer for Intel (x86_64) and Apple Silicon (ARM64).
-- [ ] Add a Windows PowerShell installer.
-- [ ] Document and test supported operating systems, architectures,
+- [x] Add a Linux installer for the compiler and runtime.
+- [x] Add a macOS installer for Intel (x86_64) and Apple Silicon (ARM64).
+- [x] Add a Windows PowerShell installer.
+- [x] Document and test supported operating systems, architectures,
   prerequisites, checksums/signatures, and upgrade behavior.
 - [ ] Provide copyable first-run instructions and verify the installed toolchain
   can run a sample project.
@@ -100,13 +100,13 @@ item before its dependencies are understood.
 
 ### Built-in test runner
 
-- [ ] Define a simple test-file convention or test annotation syntax.
-- [ ] Add a CLI test command that discovers and runs tests.
-- [ ] Report passed, failed, and errored tests with source locations and a
+- [x] Define a simple test-file convention or test annotation syntax.
+- [x] Add a CLI test command that discovers and runs tests.
+- [x] Report passed, failed, and errored tests with source locations and a
   non-zero exit status on failure.
-- [ ] Document test discovery, assertions, setup/teardown expectations, and
+- [x] Document test discovery, assertions, setup/teardown expectations, and
   example tests.
-- [ ] Add runner tests for discovery, failures, empty suites, and exit codes.
+- [x] Add runner tests for discovery, failures, empty suites, and exit codes.
 
 ### Minimal C ABI / system bindings
 

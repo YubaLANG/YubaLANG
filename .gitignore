@@ -2,3 +2,6 @@
 temp_test.txt
 tests/interpreter_regression.tmp
 AGENTS.md
+/build/
+/dist/
+/YubaLANG.spec

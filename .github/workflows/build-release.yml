@@ -1,0 +1,96 @@
+name: Build and release YubaLANG
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            asset: YubaLANG-windows-x64.zip
+          - runner: ubuntu-22.04
+            asset: YubaLANG-linux-x64.tar.gz
+          - runner: macos-15-intel
+            asset: YubaLANG-macos-x64.tar.gz
+          - runner: macos-15
+            asset: YubaLANG-macos-arm64.tar.gz
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run test suite
+        run: python -m unittest discover -s tests
+      - name: Install build dependency
+        run: python -m pip install -r requirements-build.txt
+      - name: Build standalone executable
+        run: python -m PyInstaller --noconfirm --clean --onefile --name YubaLANG YubaLANG.py
+      - name: Smoke test bundled executable on Windows
+        if: runner.os == 'Windows'
+        run: |
+          .\dist\YubaLANG.exe test tests\cases
+          .\dist\YubaLANG.exe fmt --check examples
+      - name: Smoke test bundled executable on macOS or Linux
+        if: runner.os != 'Windows'
+        run: |
+          ./dist/YubaLANG test tests/cases
+          ./dist/YubaLANG fmt --check examples
+      - name: Package Windows executable
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release | Out-Null
+          Compress-Archive -Path dist/YubaLANG.exe -DestinationPath "release/${{ matrix.asset }}"
+      - name: Package macOS or Linux executable
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p release
+          tar -czf "release/${{ matrix.asset }}" -C dist YubaLANG
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.asset }}
+          path: release/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum YubaLANG-* > SHA256SUMS
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            release-assets/YubaLANG-* release-assets/SHA256SUMS --clobber

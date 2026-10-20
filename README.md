@@ -7,4 +7,5 @@ A fast programming language with a hierarchical syntax built for modern programm
 * [Built-in function reference](docs/builtins.md)
 * [Language server and editor setup](docs/language-server.md)
 * [Formatting YubaLANG source files](docs/formatter.md)
+* [Installing YubaLANG](docs/install.md)
 * [Runnable example programs](examples/)
