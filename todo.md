@@ -14,7 +14,6 @@ that would be expensive to maintain before the user base grows.
 | P0 | Official `fmt` formatter | Low–medium | High |
 | P0 | Package manifest and Git/path dependency resolver | Medium | Critical |
 | P1 | Basic language server (LSP) | Medium | High |
-| P1 | Built-in test runner | Low–medium | High |
 | P2 | Cross-platform toolchain installers | Medium–high | High |
 | P2 | Minimal C ABI / system bindings | Medium | High |
 
