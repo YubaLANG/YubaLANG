@@ -36,6 +36,24 @@ class LanguageServerTests(unittest.TestCase):
         self.assertEqual(diagnostics[1]["range"]["start"], {"line": 1, "character": 0})
         self.assertEqual(diagnostics[1]["range"]["end"], {"line": 1, "character": 15})
 
+    def test_recognizes_ffi_command_and_provides_hover(self):
+        source = 'ffi call "./libnative.so" add i32 i32 1 -> result\n'
+        self.assertEqual(analyze_document(source), [])
+
+        server = LanguageServer()
+        uri = "file:///ffi.hl"
+        server.documents[uri] = source
+        hover, _ = server.handle({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "textDocument/hover",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 0, "character": 1},
+            },
+        })
+        self.assertIn("C ABI function", hover["result"]["contents"]["value"])
+
     def test_definition_and_hover_for_variable_function_and_builtin(self):
         server = LanguageServer()
         uri = "file:///sample.hl"

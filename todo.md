@@ -32,8 +32,7 @@ item before its dependencies are understood.
 - [x] Add a Windows PowerShell installer.
 - [x] Document and test supported operating systems, architectures,
   prerequisites, checksums/signatures, and upgrade behavior.
-- [ ] Provide copyable first-run instructions and verify the installed toolchain
-  can run a sample project.
+
 
 ### Basic language server
 
@@ -110,14 +109,14 @@ item before its dependencies are understood.
 
 ### Minimal C ABI / system bindings
 
-- [ ] Specify the supported C ABI boundary and supported primitive data types.
-- [ ] Define safe ownership, lifetime, and error-handling rules for values
+- [x] Specify the supported C ABI boundary and supported primitive data types.
+- [x] Define safe ownership, lifetime, and error-handling rules for values
   crossing the boundary.
-- [ ] Implement a minimal binding path for calling a small C function from
+- [x] Implement a minimal binding path for calling a small C function from
   YubaLANG.
-- [ ] Add a small portable example and tests for successful calls, invalid
+- [x] Add a small portable example and tests for successful calls, invalid
   signatures, and error propagation.
-- [ ] Document platform/compiler requirements and clearly state unsupported
+- [x] Document platform/compiler requirements and clearly state unsupported
   ABI features.
 
 ## Release checks

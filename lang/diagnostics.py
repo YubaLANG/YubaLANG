@@ -14,7 +14,7 @@ _UNKNOWN_TYPE = re.compile(r"Unknown type: ([A-Za-z_]\w*)")
 _COMMANDS = {
     "all", "any", "arith", "ascii", "bool", "break", "bytearray", "bytes",
     "callable", "chr", "compare", "continue", "convert", "define", "dict",
-    "enumerate", "filter", "format", "func", "getattr", "hasattr", "id",
+    "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "id",
     "if", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "repr", "return", "reversed", "set", "setattr", "slice",
     "sorted", "text", "tuple", "type", "vars", "wait", "zip",

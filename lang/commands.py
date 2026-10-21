@@ -4,6 +4,7 @@ from typing import Any, Callable
 from . import arith, iteration, string_builtins, utilities
 from .collection_commands import execute_collection_command
 from .conversion import convert_value, parse_value
+from .ffi import execute_ffi
 from .io_commands import execute_io_command
 from .runtime import Runtime, TYPES
 from .string_builtins import resolve
@@ -65,8 +66,13 @@ def execute_command(
     parts: list[str],
     runtime: Runtime,
     invoke_function: Callable[[str, list[Any]], Any],
+    source_name: str = "<memory>",
 ) -> None:
     command = parts[0]
+
+    if command == "ffi":
+        execute_ffi(parts, runtime, source_name)
+        return
 
     if command == "define":
         if len(parts) < 6 or parts[1] != "var" or not parts[2].endswith(":") or parts[4] != "=":

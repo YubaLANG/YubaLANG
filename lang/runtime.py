@@ -30,6 +30,7 @@ class UserFunction:
 class Runtime:
     scopes: list[dict[str, dict[str, Any]]] = field(default_factory=lambda: [{}])
     functions: dict[str, UserFunction] = field(default_factory=dict)
+    native_libraries: dict[str, Any] = field(default_factory=dict)
 
     def get_var(self, name: str) -> dict[str, Any] | None:
         if name in self.scopes[-1]:

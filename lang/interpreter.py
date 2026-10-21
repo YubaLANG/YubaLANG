@@ -43,11 +43,20 @@ def _type_of(value: Any) -> str:
     return "string"
 
 
-def interpret(line: str, runtime: Runtime | None = None) -> None:
+def interpret(
+    line: str,
+    runtime: Runtime | None = None,
+    source_name: str = "<memory>",
+) -> None:
     runtime = runtime or Runtime()
     parts = _split(line.strip())
     if parts:
-        execute_command(parts, runtime, lambda name, args: _invoke_function(name, args, runtime))
+        execute_command(
+            parts,
+            runtime,
+            lambda name, args: _invoke_function(name, args, runtime),
+            source_name,
+        )
 
 
 def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
@@ -238,7 +247,7 @@ def execute_lines(
                             break
 
             else:
-                interpret(raw_line, runtime)
+                interpret(raw_line, runtime, source_name)
         except (
             SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError,
             KeyError, AttributeError, OverflowError, OSError, EOFError,

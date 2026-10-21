@@ -14,7 +14,7 @@ _LEXEME = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|#[^\r\n]*|[A-Za-z_
 _COMMANDS = {
     "all", "any", "arith", "ascii", "bool", "break", "bytearray", "bytes",
     "callable", "chr", "compare", "continue", "convert", "define", "dict",
-    "enumerate", "filter", "format", "func", "getattr", "hasattr", "if",
+    "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "if",
     "id", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "repr",
     "return", "reversed", "set", "setattr", "slice", "sorted", "text",
@@ -102,6 +102,11 @@ _HOVER: dict[str, str] = {
         "accepted by a function."
     ),
     "format": "**`format <value> <format_spec> <string_destination>`** formats a value.",
+    "ffi": (
+        "**`ffi call <library> <symbol> <return-type> [<argument-type> <value> ...] "
+        "[-> <destination>]`** calls a local C ABI function using fixed-width "
+        "integer, double, and boolean values."
+    ),
     "getattr": "**`getattr <variable> <attribute> <destination>`** reads an attribute.",
     "hasattr": "**`hasattr <variable> <attribute> <bool_destination>`** checks an attribute.",
     "id": "**`id <variable> <integer_destination>`** returns the identity of a value.",
