@@ -52,31 +52,31 @@ item before its dependencies are understood.
 
 ## 2. Package management and dependency locking
 
-- [ ] Choose and document a standard project manifest format and required
+- [x] Choose and document a standard project manifest format and required
   metadata (project name, version, entry point, and YubaLANG compatibility).
-- [ ] Define a deterministic lockfile format and when it must be generated or
+- [x] Define a deterministic lockfile format and when it must be generated or
   updated.
-- [ ] Resolve local relative-path dependencies.
-- [ ] Resolve dependencies from direct Git URLs, including a reproducible
+- [x] Resolve local relative-path dependencies.
+- [x] Resolve dependencies from direct Git URLs, including a reproducible
   revision in the lockfile.
-- [ ] Add commands to initialize a project, resolve/install dependencies, and
+- [x] Add commands to initialize a project, resolve/install dependencies, and
   verify the lockfile without modifying it.
-- [ ] Validate malformed manifests, unavailable sources, conflicting
+- [x] Validate malformed manifests, unavailable sources, conflicting
   requirements, and changed dependency revisions with actionable errors.
-- [ ] Document a minimal project and a project using both path and Git
+- [x] Document a minimal project and a project using both path and Git
   dependencies.
 
 ### Library and import support
 
-- [ ] Define source-level import syntax so programs can import and use library
+- [x] Define source-level import syntax so programs can import and use library
   code, including a clear rule for namespacing and exported symbols.
-- [ ] Implement loading and execution of imported local modules in YubaLANG
+- [x] Implement loading and execution of imported local modules in YubaLANG
   programs, with useful errors for missing modules and import cycles.
-- [ ] Connect source imports to dependencies installed or resolved by the
+- [x] Connect source imports to dependencies installed or resolved by the
   package manager, including version/revision consistency with the lockfile.
-- [ ] Add package-manager commands to add, remove, install, update, and list
+- [x] Add package-manager commands to add, remove, install, update, and list
   libraries while keeping the manifest and lockfile consistent.
-- [ ] Test and document a project that imports a local library and a managed
+- [x] Test and document a project that imports a local library and a managed
   third-party library.
 
 ## 3. Developer diagnostics and error quality
@@ -87,7 +87,7 @@ item before its dependencies are understood.
   actionable hint where one is known.
 - [x] Add “Did you mean?” suggestions for undefined variables and misspelled
   function names.
-- [ ] Add typo suggestions for missing imports when import support is
+- [x] Add typo suggestions for missing imports when import support is
   introduced.
 - [x] Keep diagnostics free of internal stack traces for ordinary source
   errors.

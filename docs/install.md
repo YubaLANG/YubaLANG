@@ -40,6 +40,7 @@ with `-Uninstall`. The Windows installer removes its PATH entry as well.
 YubaLANG.exe path\to\program.hl
 YubaLANG fmt --check .
 YubaLANG test
+YubaLANG package init
 ```
 
 On macOS and Linux, the executable is named `YubaLANG` (without `.exe`).
@@ -48,6 +49,10 @@ needs a sibling `<name>.expected.txt` file containing its exact expected
 standard output. Output comparison is the assertion mechanism; there is no
 in-language assertion API yet. Tests are non-interactive and do not provide
 setup/teardown hooks.
+
+Projects can be initialized and dependencies managed with `YubaLANG package`.
+See the [project and package guide](package-manager.md) for manifests,
+lockfiles, imports, and path/Git dependencies.
 
 ## Unsigned releases
 

@@ -8,5 +8,6 @@ A fast programming language with a hierarchical syntax built for modern programm
 * [Language server and editor setup](docs/language-server.md)
 * [Formatting YubaLANG source files](docs/formatter.md)
 * [Installing YubaLANG](docs/install.md)
+* [Projects, imports, and package management](docs/package-manager.md)
 * [Calling C functions](docs/c-abi.md)
 * [Runnable example programs](examples/)

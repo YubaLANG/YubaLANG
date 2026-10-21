@@ -2,6 +2,7 @@
 
 import difflib
 import re
+from pathlib import Path
 
 from .runtime import Runtime, TYPES
 
@@ -10,12 +11,13 @@ _IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 _UNDEFINED = re.compile(r"(?:Variable|Function) '([^']+)' is not defined\.")
 _UNKNOWN_COMMAND = re.compile(r"Unknown command: ([A-Za-z_]\w*)")
 _UNKNOWN_TYPE = re.compile(r"Unknown type: ([A-Za-z_]\w*)")
+_IMPORT_NOT_FOUND = re.compile(r"Module '([^']+)' was not found;")
 
 _COMMANDS = {
     "all", "any", "arith", "ascii", "bool", "break", "bytearray", "bytes",
     "callable", "chr", "compare", "continue", "convert", "define", "dict",
     "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "id",
-    "if", "iter", "len", "list", "loop", "map", "next", "open", "ord",
+    "if", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "repr", "return", "reversed", "set", "setattr", "slice",
     "sorted", "text", "tuple", "type", "vars", "wait", "zip",
 }
@@ -26,7 +28,9 @@ def _closest(name: str, candidates: set[str]) -> str | None:
     return matches[0] if matches else None
 
 
-def _context_hint(error: Exception, runtime: Runtime) -> str | None:
+def _context_hint(
+    error: Exception, runtime: Runtime, source_name: str
+) -> str | None:
     message = str(error)
     match = _UNDEFINED.fullmatch(message)
     if match:
@@ -53,6 +57,19 @@ def _context_hint(error: Exception, runtime: Runtime) -> str | None:
         suggestion = _closest(match.group(1), set(TYPES))
         return f"Did you mean '{suggestion}'?" if suggestion else None
 
+    match = _IMPORT_NOT_FOUND.match(message)
+    if match:
+        module_name = match.group(1)
+        source_directory = (
+            Path.cwd() if source_name == "<memory>" else Path(source_name).resolve().parent
+        )
+        candidates = {path.stem for path in source_directory.glob("*.hl")}
+        candidates.update(runtime.module_aliases)
+        suggestion = _closest(module_name.split(".")[-1], candidates)
+        if suggestion:
+            return f"Did you mean '{suggestion}'?"
+        return "Check the module name and make sure its .hl file or package is available."
+
     if isinstance(error, ZeroDivisionError):
         return "Check that the divisor is not zero."
     if isinstance(error, IndexError):
@@ -75,15 +92,22 @@ def format_diagnostic(
     end = len(line.rstrip())
     message = str(error)
 
-    match = _UNDEFINED.fullmatch(message)
-    if match:
-        name = match.group(1)
+    undefined_match = _UNDEFINED.fullmatch(message)
+    import_match = _IMPORT_NOT_FOUND.match(message)
+    if undefined_match:
+        name = undefined_match.group(1)
         token = next(
             (item for item in _IDENTIFIER.finditer(line, start, end) if item.group() == name),
             None,
         )
         if token:
             start, end = token.span()
+    elif import_match:
+        imported_name = import_match.group(1)
+        imported_start = line.find(imported_name, start, end)
+        if imported_start >= 0:
+            start = imported_start
+            end = start + len(imported_name)
     else:
         match = _UNKNOWN_COMMAND.fullmatch(message) or _UNKNOWN_TYPE.fullmatch(message)
         if match:
@@ -105,7 +129,7 @@ def format_diagnostic(
         f"  line {line_number}: {shown_line}",
         f"           {' ' * start_column}{'^' * (end_column - start_column)}",
     ]
-    hint = _context_hint(error, runtime)
+    hint = _context_hint(error, runtime, source_name)
     if hint:
         output.append(f"  hint: {hint}")
     return "\n".join(output)

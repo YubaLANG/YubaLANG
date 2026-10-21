@@ -15,7 +15,7 @@ _COMMANDS = {
     "all", "any", "arith", "ascii", "bool", "break", "bytearray", "bytes",
     "callable", "chr", "compare", "continue", "convert", "define", "dict",
     "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "if",
-    "id", "iter", "len", "list", "loop", "map", "next", "open", "ord",
+    "id", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "repr",
     "return", "reversed", "set", "setattr", "slice", "sorted", "text",
     "tuple", "type", "vars", "wait", "zip",
@@ -25,7 +25,7 @@ _ARITY: dict[str, tuple[int, ...]] = {
     "bytearray": (3,), "bytes": (3,), "callable": (3,), "chr": (3,),
     "compare": (5,), "convert": (3, 4), "enumerate": (3, 4),
     "filter": (4,), "format": (3, 4), "getattr": (4,), "hasattr": (4,),
-    "id": (3,),
+    "id": (3,), "import": (2, 4),
     "iter": (3,), "len": (3,), "map": (4,), "next": (3, 4),
     "ord": (3,), "range": (3, 4, 5), "repr": (3,), "reversed": (3,),
     "setattr": (4,), "slice": (5, 6), "sorted": (3, 4), "type": (3,),
@@ -59,6 +59,10 @@ _HOVER: dict[str, str] = {
     "func": (
         "**`func define <name> [parameters] ... endfunc`** defines a function; "
         "use `func call` to call it."
+    ),
+    "import": (
+        "**`import <module> [as <namespace>]`** loads a local or installed "
+        "module; call its functions with `func call namespace.function`."
     ),
     "if": "**`if <condition>`** starts a conditional block. Close it with `endif`.",
     "elseif": "**`elseif <condition>`** adds a conditional branch.",
@@ -241,6 +245,8 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
                 error = f"Unknown type: {parts[3]}"
         elif command in _ARITY and len(parts) not in _ARITY[command]:
             error = f"Invalid {command} command or arguments."
+        elif command == "import" and len(parts) == 4 and parts[2] != "as":
+            error = "Usage: import <module> [as <namespace>]"
         elif command == "convert" and len(parts) == 4 and parts[2] != "to":
             error = "Usage: convert <variable> to <type>"
         elif command == "arith" and len(parts) not in (3, 4):

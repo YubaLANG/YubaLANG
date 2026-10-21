@@ -5,3 +5,4 @@ AGENTS.md
 /build/
 /dist/
 /YubaLANG.spec
+.yuba/

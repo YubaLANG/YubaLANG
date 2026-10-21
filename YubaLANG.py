@@ -7,6 +7,7 @@ from pathlib import Path
 from lang.formatter import FormatError, format_source
 from lang.interpreter import run_file
 from lang.lsp import serve
+from lang.packages import run_package_command
 from lang.test_runner import run_tests
 
 
@@ -66,6 +67,9 @@ def main():
         serve()
         return
 
+    if len(sys.argv) >= 2 and sys.argv[1] in ("package", "pkg"):
+        sys.exit(run_package_command(sys.argv[2:]))
+
     if len(sys.argv) >= 2 and sys.argv[1] == "fmt":
         arguments = sys.argv[2:]
         check = False
@@ -87,7 +91,8 @@ def main():
         print(
             "Usage: py YubaLANG.py <file.hl> | --lsp | "
             "fmt [--check|--write] <file.hl|directory>... | "
-            "test [test-file.hl|test-directory]"
+            "test [test-file.hl|test-directory] | "
+            "package <init|add|remove|install|update|list|check>"
         )
         sys.exit(1)
 

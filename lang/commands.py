@@ -214,7 +214,7 @@ def execute_command(
         function_name, iterable, destination = parts[1], resolve(parts[2], runtime), parts[3]
 
         def callback(value: Any) -> Any:
-            if function_name in runtime.functions:
+            if runtime.resolve_function(function_name) is not None:
                 result = invoke_function(function_name, [value])
                 if result is None:
                     raise ValueError(
@@ -340,7 +340,7 @@ def _execute_utility_command(parts: list[str], runtime: Runtime) -> None:
     if command == "bool" and len(parts) == 3:
         _assign(runtime, parts[2], bool(resolve(parts[1], runtime)))
     elif command == "callable" and len(parts) == 3:
-        result = parts[1] in runtime.functions or parts[1] in {
+        result = runtime.resolve_function(parts[1]) is not None or parts[1] in {
             "abs", "ascii", "bool", "chr", "float", "int", "len", "ord",
             "repr", "round", "str",
         }

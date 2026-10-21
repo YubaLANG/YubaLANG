@@ -2,10 +2,18 @@
 
 import shlex
 import sys
+from pathlib import Path
 from typing import Any
 
 from .commands import evaluate_condition, execute_command
 from .diagnostics import format_diagnostic
+from .packages import (
+    PackageError,
+    find_project_root,
+    read_manifest,
+    resolve_dependency,
+    resolve_entry,
+)
 from .runtime import Runtime, TYPES, UserFunction
 from .string_builtins import resolve
 
@@ -60,9 +68,10 @@ def interpret(
 
 
 def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
-    function = runtime.functions.get(name)
-    if function is None:
+    resolved_name = runtime.resolve_function(name)
+    if resolved_name is None:
         raise ValueError(f"Function '{name}' is not defined.")
+    function = runtime.functions[resolved_name]
     if len(arguments) != len(function.parameters):
         raise TypeError(
             f"Function '{name}' expects {len(function.parameters)} argument(s), "
@@ -74,16 +83,19 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
         for parameter, value in zip(function.parameters, arguments)
     }
     runtime.scopes.append(local_scope)
+    runtime.current_namespaces.append(function.namespace)
     try:
         execute_lines(
             function.body,
             runtime,
             function.source_name,
             function.line_numbers or None,
+            function.namespace or None,
         )
     except ReturnException as result:
         return result.value if result.has_value else None
     finally:
+        runtime.current_namespaces.pop()
         runtime.scopes.pop()
     return None
 
@@ -92,7 +104,7 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
     if len(parts) < 3:
         raise SyntaxError("Usage: func call <name> [arguments] [-> destination]")
     name = parts[2]
-    if name not in runtime.functions:
+    if runtime.resolve_function(name) is None:
         raise ValueError(f"Function '{name}' is not defined.")
     call_parts = parts[3:]
     destination = None
@@ -111,11 +123,89 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
         runtime.update_var(destination, target["type"], result)
 
 
+def _module_file(module_name: str, runtime: Runtime, source_name: str) -> Path:
+    parts = module_name.split(".")
+    if (
+        runtime.project_root is not None
+        and parts[0] in read_manifest(runtime.project_root)["dependencies"]
+    ):
+        dependency_root = resolve_dependency(runtime.project_root, parts[0])
+        if dependency_root is None:
+            raise PackageError(f"Dependency '{parts[0]}' could not be resolved.")
+        if len(parts) == 1:
+            manifest = read_manifest(dependency_root)
+            return resolve_entry(dependency_root, manifest)
+        base = dependency_root.joinpath(*parts[1:])
+    else:
+        if source_name == "<memory>":
+            base_directory = Path.cwd()
+        else:
+            source_path = Path(source_name).resolve()
+            base_directory = source_path.parent
+            if runtime.project_root is None:
+                runtime.project_root = find_project_root(source_path)
+        base = base_directory.joinpath(*parts)
+
+    candidates = (base.with_suffix(".hl"), base / "main.hl")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    searched = " or ".join(str(candidate) for candidate in candidates)
+    raise FileNotFoundError(
+        f"Module '{module_name}' was not found; tried {searched}."
+    )
+
+
+def _execute_import(parts: list[str], runtime: Runtime, source_name: str) -> None:
+    if len(parts) not in (2, 4) or (len(parts) == 4 and parts[2] != "as"):
+        raise SyntaxError("Usage: import <module> [as <namespace>]")
+    module_name = parts[1]
+    if not all(part.isidentifier() for part in module_name.split(".")):
+        raise SyntaxError(f"Invalid module name '{module_name}'.")
+    alias = parts[3] if len(parts) == 4 else module_name.split(".")[-1]
+    if not alias.isidentifier():
+        raise SyntaxError(f"Invalid module namespace '{alias}'.")
+
+    module_path = _module_file(module_name, runtime, source_name)
+    key = str(module_path.resolve())
+    if key in runtime.import_stack:
+        cycle = " -> ".join((*runtime.import_stack, key))
+        raise ValueError(f"Import cycle detected: {cycle}")
+    if alias in runtime.module_aliases:
+        if runtime.module_alias_paths[alias] != key:
+            raise ValueError(
+                f"Namespace '{alias}' is already bound to a different module."
+            )
+        namespace = runtime.module_aliases[alias]
+    else:
+        namespace = runtime.loaded_modules.get(key, alias)
+        runtime.module_aliases[alias] = namespace
+        runtime.module_alias_paths[alias] = key
+
+    if key in runtime.loaded_modules:
+        return
+    runtime.import_stack.append(key)
+    try:
+        try:
+            lines = module_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError) as error:
+            raise ValueError(f"Cannot read module '{module_path}': {error}") from error
+        runtime.current_namespaces.append(namespace)
+        try:
+            execute_lines(lines, runtime, str(module_path), namespace=namespace)
+        finally:
+            runtime.current_namespaces.pop()
+        runtime.loaded_modules[key] = namespace
+    finally:
+        runtime.import_stack.pop()
+
+
 def execute_lines(
     lines: list[str],
     runtime: Runtime | None = None,
     source_name: str = "<memory>",
     line_numbers: list[int] | None = None,
+    namespace: str | None = None,
 ) -> None:
     runtime = runtime or Runtime()
     if line_numbers is None:
@@ -192,7 +282,9 @@ def execute_lines(
 
                 for condition, body, body_line_numbers in branches:
                     if evaluate_condition(condition, runtime):
-                        execute_lines(body, runtime, source_name, body_line_numbers)
+                        execute_lines(
+                            body, runtime, source_name, body_line_numbers, namespace
+                        )
                         break
 
             elif command == "func" and len(parts) >= 3 and parts[1] == "define":
@@ -209,12 +301,18 @@ def execute_lines(
                     index += 1
                 if index == len(lines):
                     raise SyntaxError(f"Missing endfunc for function '{function_name}'.")
-                runtime.functions[function_name] = UserFunction(
-                    parameters, body, source_name, body_line_numbers
+                qualified_name = (
+                    f"{namespace}.{function_name}" if namespace else function_name
+                )
+                runtime.functions[qualified_name] = UserFunction(
+                    parameters, body, source_name, body_line_numbers, namespace or ""
                 )
 
             elif command == "func" and len(parts) >= 3 and parts[1] == "call":
                 _execute_function_call(parts, runtime)
+
+            elif command == "import":
+                _execute_import(parts, runtime, source_name)
 
             elif command == "loop" and len(parts) == 3 and parts[1] in ("for", "while"):
                 loop_type, condition = parts[1], parts[2]
@@ -232,7 +330,9 @@ def execute_lines(
                     count = value["value"] if value else int(condition)
                     for _ in range(count):
                         try:
-                            execute_lines(body, runtime, source_name, body_line_numbers)
+                            execute_lines(
+                                body, runtime, source_name, body_line_numbers, namespace
+                            )
                         except ContinueException:
                             continue
                         except BreakException:
@@ -240,7 +340,9 @@ def execute_lines(
                 else:
                     while evaluate_condition(condition, runtime):
                         try:
-                            execute_lines(body, runtime, source_name, body_line_numbers)
+                            execute_lines(
+                                body, runtime, source_name, body_line_numbers, namespace
+                            )
                         except ContinueException:
                             continue
                         except BreakException:
@@ -261,6 +363,7 @@ def run_file(filename: str) -> None:
     with open(filename, "r", encoding="utf-8") as source_file:
         lines = source_file.readlines()
     runtime = Runtime()
+    runtime.project_root = find_project_root(Path(filename))
     try:
         execute_lines(lines, runtime, filename)
     except ReturnException:

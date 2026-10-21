@@ -54,6 +54,27 @@ class LanguageServerTests(unittest.TestCase):
         })
         self.assertIn("C ABI function", hover["result"]["contents"]["value"])
 
+    def test_recognizes_import_syntax_and_provides_hover(self):
+        self.assertEqual(analyze_document("import helpers as tools\n"), [])
+        self.assertEqual(
+            analyze_document("import helpers from somewhere\n")[0]["message"],
+            "Usage: import <module> [as <namespace>]",
+        )
+
+        server = LanguageServer()
+        uri = "file:///imports.hl"
+        server.documents[uri] = "import helpers\n"
+        hover, _ = server.handle({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "textDocument/hover",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 0, "character": 1},
+            },
+        })
+        self.assertIn("loads a local or installed module", hover["result"]["contents"]["value"])
+
     def test_definition_and_hover_for_variable_function_and_builtin(self):
         server = LanguageServer()
         uri = "file:///sample.hl"
