@@ -38,7 +38,9 @@ class CAbiTests(unittest.TestCase):
                     str(source_path),
                 )
 
-            load_library.assert_called_once_with(str(library_path))
+            load_library.assert_called_once()
+            loaded_path = Path(load_library.call_args.args[0])
+            self.assertTrue(loaded_path.samefile(library_path))
             self.assertEqual(function.argtypes, [ctypes.c_int32, ctypes.c_int32])
             self.assertIs(function.restype, ctypes.c_int32)
             function.assert_called_once_with(40, 2)
