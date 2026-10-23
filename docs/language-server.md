@@ -1,7 +1,7 @@
 # YubaLANG language server
 
 YubaLANG includes a lightweight Language Server Protocol (LSP) server for
-`.hl` files. It uses the standard input/output JSON-RPC transport and the
+`.yl` files. It uses the standard input/output JSON-RPC transport and the
 Python standard library; it does not execute the open source file.
 
 ## Starting the server
@@ -13,7 +13,7 @@ py YubaLANG.py --lsp
 ```
 
 The server communicates over stdin/stdout. Configure the editor's LSP client
-to use that command, associate `.hl` files with YubaLANG, and avoid wrapping
+to use that command, associate `.yl` files with YubaLANG, and avoid wrapping
 the command in a shell that writes banners to stdout. In VS Code, a generic
 LSP client extension is required because VS Code does not include a built-in
 client for arbitrary language servers.
@@ -32,7 +32,7 @@ should send the complete updated document in each change notification.
 
 ## Try it
 
-Open [`examples\functions.hl`](../examples/functions.hl) in an LSP-capable
+Open [`examples\functions.yl`](../examples/functions.yl) in an LSP-capable
 editor configured to launch the command above. Hover over `func`, `return`,
 or `filter`, and use Go to Definition on `is_positive` or `values`.
 

@@ -1,6 +1,6 @@
 ﻿# YubaLANG Example Programs
 
-## hello.hl
+## hello.yl
 
 ```hl
 text output "Hello, world!"
@@ -8,7 +8,7 @@ text output "Hello, world!"
 
 ---
 
-## variables.hl
+## variables.yl
 
 ```hl
 define var name: string = "YubaLANG"
@@ -22,7 +22,7 @@ text output active
 
 ---
 
-## calculator.hl
+## calculator.yl
 
 ```hl
 define var a: int = 20
@@ -37,7 +37,7 @@ arith mod a b
 
 ---
 
-## lists.hl
+## lists.yl
 
 ```hl
 define var numbers: list = [10, 20, 30]
@@ -61,7 +61,7 @@ arith min numbers
 
 ---
 
-## conditions.hl
+## conditions.yl
 
 ```hl
 define var score: int = 75
@@ -78,7 +78,7 @@ endif
 
 ---
 
-## functions.hl
+## functions.yl
 
 ```hl
 func define greet
@@ -90,7 +90,7 @@ func call greet
 
 ---
 
-## loops.hl
+## loops.yl
 
 ```hl
 loop for 5
@@ -100,7 +100,7 @@ endloop
 
 ---
 
-## input.hl
+## input.yl
 
 ```hl
 define var name: string = ""
@@ -113,7 +113,7 @@ text output name
 
 ---
 
-## conversion.hl
+## conversion.yl
 
 ```hl
 define var number: int = 42
@@ -127,7 +127,7 @@ text output number
 
 ---
 
-## complete.hl
+## complete.yl
 
 ```hl
 define var language: string = "YubaLANG"

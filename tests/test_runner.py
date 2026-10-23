@@ -36,7 +36,7 @@ class TestRunnerTests(unittest.TestCase):
     def test_reports_output_mismatch_and_nonzero_exit(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            (folder / "wrong.hl").write_text('text output "actual"\n', encoding="utf-8")
+            (folder / "wrong.yl").write_text('text output "actual"\n', encoding="utf-8")
             (folder / "wrong.expected.txt").write_text("expected\n", encoding="utf-8")
 
             result = run_cli("test", folder)
@@ -49,7 +49,7 @@ class TestRunnerTests(unittest.TestCase):
     def test_requires_exact_final_newline(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            (folder / "newline.hl").write_text('text output "same"\n', encoding="utf-8")
+            (folder / "newline.yl").write_text('text output "same"\n', encoding="utf-8")
             (folder / "newline.expected.txt").write_text("same", encoding="utf-8")
 
             result = run_cli("test", folder)
@@ -60,7 +60,7 @@ class TestRunnerTests(unittest.TestCase):
     def test_reports_runtime_error(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            (folder / "broken.hl").write_text("text output missing\n", encoding="utf-8")
+            (folder / "broken.yl").write_text("text output missing\n", encoding="utf-8")
             (folder / "broken.expected.txt").write_text("", encoding="utf-8")
 
             result = run_cli("test", folder)
@@ -74,11 +74,11 @@ class TestRunnerTests(unittest.TestCase):
             result = run_cli("test", directory)
 
         self.assertEqual(result.returncode, 1)
-        self.assertIn("no .hl tests found", result.stderr)
+        self.assertIn("no .yl tests found", result.stderr)
 
     def test_missing_expected_file_is_an_error(self):
         with tempfile.TemporaryDirectory() as directory:
-            program = Path(directory) / "missing-output.hl"
+            program = Path(directory) / "missing-output.yl"
             program.write_text('text output "hello"\n', encoding="utf-8")
 
             result = run_cli("test", program)

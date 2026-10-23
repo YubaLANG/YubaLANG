@@ -17,7 +17,7 @@ FIXTURES = Path(__file__).parent / "formatter"
 class FormatterTests(unittest.TestCase):
     def test_formats_fixture_and_is_idempotent(self):
         source = (FIXTURES / "style.input.txt").read_text(encoding="utf-8")
-        expected = (FIXTURES / "style.expected.hl").read_text(encoding="utf-8")
+        expected = (FIXTURES / "style.expected.yl").read_text(encoding="utf-8")
 
         formatted = format_source(source)
 
@@ -49,7 +49,7 @@ class FormatterTests(unittest.TestCase):
 
     def test_check_accepts_windows_line_endings(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "sample.hl"
+            source = Path(directory) / "sample.yl"
             with source.open("w", encoding="utf-8", newline="") as output_file:
                 output_file.write("text output 'ok'\r\n")
 
@@ -63,7 +63,7 @@ class FormatterTests(unittest.TestCase):
 
     def test_cli_check_and_write_modes(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "sample.hl"
+            source = Path(directory) / "sample.yl"
             source.write_text("if true\ntext output 'ok'\nendif", encoding="utf-8")
 
             check = subprocess.run(

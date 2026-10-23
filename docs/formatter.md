@@ -1,6 +1,6 @@
 # YubaLANG formatter
 
-The built-in `fmt` command formats `.hl` files with a consistent style:
+The built-in `fmt` command formats `.yl` files with a consistent style:
 
 - Four spaces per nested `if`, `func define`, or `loop` block.
 - `else` and `elseif` align with their matching `if`; closing statements align
@@ -10,10 +10,10 @@ The built-in `fmt` command formats `.hl` files with a consistent style:
   preserved. Write mode uses UTF-8 and a single final LF newline; check mode
   ignores the difference between LF and CRLF line endings.
 
-Format one file or all `.hl` files under a directory recursively:
+Format one file or all `.yl` files under a directory recursively:
 
 ```text
-py YubaLANG.py fmt --write path\to\program.hl
+py YubaLANG.py fmt --write path\to\program.yl
 py YubaLANG.py fmt --write path\to\project
 ```
 

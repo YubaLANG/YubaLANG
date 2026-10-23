@@ -390,12 +390,12 @@ def run_package_command(arguments: list[str]) -> int:
                 {
                     "name": name,
                     "version": "0.1.0",
-                    "entry": "main.hl",
+                    "entry": "main.yl",
                     "yubalang": "1.2",
                     "dependencies": {},
                 },
             )
-            entry = root / "main.hl"
+            entry = root / "main.yl"
             if not entry.exists():
                 try:
                     entry.write_text(

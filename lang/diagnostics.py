@@ -63,12 +63,12 @@ def _context_hint(
         source_directory = (
             Path.cwd() if source_name == "<memory>" else Path(source_name).resolve().parent
         )
-        candidates = {path.stem for path in source_directory.glob("*.hl")}
+        candidates = {path.stem for path in source_directory.glob("*.yl")}
         candidates.update(runtime.module_aliases)
         suggestion = _closest(module_name.split(".")[-1], candidates)
         if suggestion:
             return f"Did you mean '{suggestion}'?"
-        return "Check the module name and make sure its .hl file or package is available."
+        return "Check the module name and make sure its .yl file or package is available."
 
     if isinstance(error, ZeroDivisionError):
         return "Check that the divisor is not zero."

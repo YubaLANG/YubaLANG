@@ -31,14 +31,14 @@ def write_package(root: Path, name: str, source: str) -> None:
             {
                 "name": name,
                 "version": "0.1.0",
-                "entry": "main.hl",
+                "entry": "main.yl",
                 "yubalang": "1.2",
                 "dependencies": {},
             }
         ),
         encoding="utf-8",
     )
-    (root / "main.hl").write_text(source, encoding="utf-8")
+    (root / "main.yl").write_text(source, encoding="utf-8")
 
 
 class PackageManagerTests(unittest.TestCase):
@@ -49,9 +49,9 @@ class PackageManagerTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertTrue((project / "yuba.json").is_file())
-            self.assertTrue((project / "main.hl").is_file())
+            self.assertTrue((project / "main.yl").is_file())
             parsed = json.loads((project / "yuba.json").read_text(encoding="utf-8"))
-            self.assertEqual(parsed["entry"], "main.hl")
+            self.assertEqual(parsed["entry"], "main.yl")
 
     def test_add_path_dependency_lock_import_and_check(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,7 +79,7 @@ class PackageManagerTests(unittest.TestCase):
             listed = run_cli("package", "list", cwd=project)
             self.assertEqual(listed.returncode, 0, listed.stderr)
             self.assertIn("mylib: ../mylib", listed.stdout)
-            executed = run_cli(project / "main.hl", cwd=project)
+            executed = run_cli(project / "main.yl", cwd=project)
             self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
             self.assertEqual(executed.stdout, "42\n")
 
@@ -191,15 +191,15 @@ class PackageManagerTests(unittest.TestCase):
             self.assertEqual(len(revision), 40)
             self.assertTrue((project / ".yuba" / "packages" / "gitlib").is_dir())
 
-            executed = run_cli(project / "main.hl", cwd=project)
+            executed = run_cli(project / "main.yl", cwd=project)
             self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
             self.assertEqual(executed.stdout, "42\n")
 
-            (work / "main.hl").write_text(
+            (work / "main.yl").write_text(
                 "func define answer\n    return 43\nendfunc\n",
                 encoding="utf-8",
             )
-            subprocess.run(["git", "-C", str(work), "add", "main.hl"], check=True)
+            subprocess.run(["git", "-C", str(work), "add", "main.yl"], check=True)
             subprocess.run(
                 ["git", "-C", str(work), "commit", "-m", "Update answer"],
                 check=True,
@@ -227,7 +227,7 @@ class PackageManagerTests(unittest.TestCase):
             self.assertNotEqual(
                 new_lock["dependencies"]["gitlib"]["resolved"]["rev"], revision
             )
-            executed_after_update = run_cli(project / "main.hl", cwd=project)
+            executed_after_update = run_cli(project / "main.yl", cwd=project)
             self.assertEqual(
                 executed_after_update.returncode,
                 0,

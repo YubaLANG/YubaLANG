@@ -19,7 +19,7 @@ class CAbiTests(unittest.TestCase):
             folder = Path(directory)
             library_path = folder / ("native.dll" if os.name == "nt" else "libnative.so")
             library_path.touch()
-            source_path = folder / "program.hl"
+            source_path = folder / "program.yl"
             function = mock.Mock(return_value=42)
             library = mock.Mock()
             library.add_i32 = function
@@ -65,7 +65,7 @@ class CAbiTests(unittest.TestCase):
                         f'ffi call "{library_name}" update_values void bool enabled f64 ratio',
                     ],
                     runtime,
-                    str(folder / "program.hl"),
+                    str(folder / "program.yl"),
                 )
 
             self.assertEqual(function.argtypes, [ctypes.c_bool, ctypes.c_double])
@@ -89,7 +89,7 @@ class CAbiTests(unittest.TestCase):
                             f'ffi call "{library_name}" get_value i32 i32 2147483648 -> result',
                         ],
                         Runtime(),
-                        str(folder / "program.hl"),
+                        str(folder / "program.yl"),
                     )
 
             function.assert_not_called()
@@ -112,7 +112,7 @@ class CAbiTests(unittest.TestCase):
                             f'ffi call "{library_name}" get_value i32 -> result',
                         ],
                         Runtime(),
-                        str(folder / "program.hl"),
+                        str(folder / "program.yl"),
                     )
 
             self.assertIn("requires a YubaLANG int destination", output.getvalue())
@@ -121,7 +121,7 @@ class CAbiTests(unittest.TestCase):
     def test_reports_missing_library_and_symbol(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            source_path = str(folder / "program.hl")
+            source_path = str(folder / "program.yl")
             output = io.StringIO()
             with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
                 execute_lines(
@@ -178,7 +178,7 @@ class CAbiTests(unittest.TestCase):
                     f'ffi call "{library_path.name}" yubalang_add_i32 i32 i32 19 i32 23 -> result',
                 ],
                 runtime,
-                str(folder / "program.hl"),
+                str(folder / "program.yl"),
             )
             self.assertEqual(runtime.require_var("result")["value"], 42)
 

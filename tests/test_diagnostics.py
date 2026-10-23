@@ -12,7 +12,7 @@ from lang.interpreter import execute_lines, run_file
 class RuntimeDiagnosticTests(unittest.TestCase):
     def test_file_diagnostic_includes_location_snippet_and_variable_suggestion(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "example.hl"
+            source = Path(directory) / "example.yl"
             source.write_text(
                 "define var count: int = 1\n"
                 "text output coutn\n",
@@ -31,7 +31,7 @@ class RuntimeDiagnosticTests(unittest.TestCase):
 
     def test_run_file_accepts_utf8_bom(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "bom.hl"
+            source = Path(directory) / "bom.yl"
             source.write_text("text output 'hello'\n", encoding="utf-8-sig")
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
@@ -50,18 +50,18 @@ class RuntimeDiagnosticTests(unittest.TestCase):
         ]
 
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
-            execute_lines(source, source_name="nested.hl")
+            execute_lines(source, source_name="nested.yl")
 
         diagnostic = output.getvalue()
-        self.assertIn("nested.hl:3:17: error:", diagnostic)
+        self.assertIn("nested.yl:3:17: error:", diagnostic)
         self.assertIn("Did you mean 'count'?", diagnostic)
 
     def test_unknown_command_suggests_a_valid_command(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
-            execute_lines(["tex output 'hello'"], source_name="typo.hl")
+            execute_lines(["tex output 'hello'"], source_name="typo.yl")
 
-        self.assertIn("typo.hl:1:1: error: Unknown command: tex", output.getvalue())
+        self.assertIn("typo.yl:1:1: error: Unknown command: tex", output.getvalue())
         self.assertIn("Did you mean 'text'?", output.getvalue())
 
     def test_undefined_function_suggests_a_defined_function(self):
@@ -74,7 +74,7 @@ class RuntimeDiagnosticTests(unittest.TestCase):
         ]
 
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
-            execute_lines(source, source_name="function.hl")
+            execute_lines(source, source_name="function.yl")
 
         self.assertIn("Function 'calculte' is not defined.", output.getvalue())
         self.assertIn("Did you mean 'calculate'?", output.getvalue())
@@ -82,16 +82,16 @@ class RuntimeDiagnosticTests(unittest.TestCase):
     def test_syntax_error_has_location_and_actionable_hint(self):
         output = io.StringIO()
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
-            execute_lines(["if true", "text output 'unfinished"], source_name="syntax.hl")
+            execute_lines(["if true", "text output 'unfinished"], source_name="syntax.yl")
 
         diagnostic = output.getvalue()
-        self.assertIn("syntax.hl:2:1: error: Invalid command quoting:", diagnostic)
+        self.assertIn("syntax.yl:2:1: error: Invalid command quoting:", diagnostic)
         self.assertIn("line 2: text output 'unfinished", diagnostic)
         self.assertIn("Check the command syntax", diagnostic)
 
     def test_cli_reports_source_error_without_python_traceback(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "broken.hl"
+            source = Path(directory) / "broken.yl"
             source.write_text("text output missing\n", encoding="utf-8")
             result = subprocess.run(
                 [sys.executable, "YubaLANG.py", str(source)],

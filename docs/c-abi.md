@@ -51,7 +51,7 @@ On macOS, use `-dynamiclib` instead of `-shared` and name the output
 cl /nologo /LD examples\ffi_add.c /link /OUT:examples\libnative_add.dll
 ```
 
-Set the library filename in [`examples/ffi_add.hl`](../examples/ffi_add.hl) to
+Set the library filename in [`examples/ffi_add.yl`](../examples/ffi_add.yl) to
 the matching platform library, then run the program from the repository root.
 It should print `42`. A C compiler is needed to build the library; the
 YubaLANG runtime itself does not compile C code.

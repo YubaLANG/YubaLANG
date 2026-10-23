@@ -11,7 +11,7 @@ class ImportTests(unittest.TestCase):
     def test_import_accepts_utf8_bom(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "library.hl").write_text(
+            (root / "library.yl").write_text(
                 "func define answer\n    return 42\nendfunc\n",
                 encoding="utf-8-sig",
             )
@@ -25,7 +25,7 @@ class ImportTests(unittest.TestCase):
                         "text output result",
                     ],
                     Runtime(),
-                    str(root / "main.hl"),
+                    str(root / "main.yl"),
                 )
 
         self.assertEqual(output.getvalue(), "42\n")
@@ -33,7 +33,7 @@ class ImportTests(unittest.TestCase):
     def test_imports_and_calls_namespaced_functions_with_private_helpers(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "mathlib.hl").write_text(
+            (root / "mathlib.yl").write_text(
                 "func define helper\n"
                 "    return 42\n"
                 "endfunc\n"
@@ -45,7 +45,7 @@ class ImportTests(unittest.TestCase):
                 "func call helper\n",
                 encoding="utf-8",
             )
-            program = root / "main.hl"
+            program = root / "main.yl"
             program.write_text(
                 "import mathlib as math\n"
                 "define var result: int = 0\n"
@@ -62,7 +62,7 @@ class ImportTests(unittest.TestCase):
     def test_imported_function_is_available_to_callable_and_map(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "helpers.hl").write_text(
+            (root / "helpers.yl").write_text(
                 "func define identity value\n"
                 "    return value\n"
                 "endfunc\n",
@@ -81,7 +81,7 @@ class ImportTests(unittest.TestCase):
                         "map helpers.identity values mapped",
                     ],
                     runtime,
-                    str(root / "main.hl"),
+                    str(root / "main.yl"),
                 )
 
         self.assertTrue(runtime.require_var("is_callable")["value"])
@@ -90,7 +90,7 @@ class ImportTests(unittest.TestCase):
     def test_reuses_module_import_and_reports_missing_modules(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "library.hl").write_text(
+            (root / "library.yl").write_text(
                 "func define value\n    return 1\nendfunc\n",
                 encoding="utf-8",
             )
@@ -98,12 +98,12 @@ class ImportTests(unittest.TestCase):
             execute_lines(
                 ["import library", "import library", "import library as helpers"],
                 runtime,
-                str(root / "main.hl"),
+                str(root / "main.yl"),
             )
             self.assertEqual(len(runtime.loaded_modules), 1)
             self.assertEqual(runtime.module_aliases["helpers"], "library")
 
-            (root / "other.hl").write_text(
+            (root / "other.yl").write_text(
                 "func define different\n    return 2\nendfunc\n",
                 encoding="utf-8",
             )
@@ -112,7 +112,7 @@ class ImportTests(unittest.TestCase):
                 execute_lines(
                     ["import other as library"],
                     runtime,
-                    str(root / "main.hl"),
+                    str(root / "main.yl"),
                 )
             self.assertIn("already bound to a different module", output.getvalue())
 
@@ -121,7 +121,7 @@ class ImportTests(unittest.TestCase):
                 execute_lines(
                     ["import missing"],
                     Runtime(),
-                    str(root / "main.hl"),
+                    str(root / "main.yl"),
                 )
             self.assertIn("Module 'missing' was not found", output.getvalue())
 
@@ -130,20 +130,20 @@ class ImportTests(unittest.TestCase):
                 execute_lines(
                     ["import libray"],
                     Runtime(),
-                    str(root / "main.hl"),
+                    str(root / "main.yl"),
                 )
-            self.assertIn(f"{root / 'main.hl'}:1:8: error:", output.getvalue())
+            self.assertIn(f"{root / 'main.yl'}:1:8: error:", output.getvalue())
             self.assertIn("Did you mean 'library'?", output.getvalue())
 
     def test_reports_import_cycles(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "first.hl").write_text("import second\n", encoding="utf-8")
-            (root / "second.hl").write_text("import first\n", encoding="utf-8")
+            (root / "first.yl").write_text("import second\n", encoding="utf-8")
+            (root / "second.yl").write_text("import first\n", encoding="utf-8")
             output = io.StringIO()
 
             with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
-                execute_lines(["import first"], Runtime(), str(root / "main.hl"))
+                execute_lines(["import first"], Runtime(), str(root / "main.yl"))
 
         self.assertIn("Import cycle detected", output.getvalue())
 

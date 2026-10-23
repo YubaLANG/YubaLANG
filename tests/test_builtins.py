@@ -295,7 +295,7 @@ class BuiltinCommandTests(unittest.TestCase):
 
     def test_run_file_reads_and_executes_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "program.hl"
+            source = Path(directory) / "program.yl"
             opened_file = Path(directory) / "opened.txt"
             escaped_path = str(opened_file).replace("\\", "\\\\")
             source.write_text(

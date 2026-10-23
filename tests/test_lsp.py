@@ -41,7 +41,7 @@ class LanguageServerTests(unittest.TestCase):
         self.assertEqual(analyze_document(source), [])
 
         server = LanguageServer()
-        uri = "file:///ffi.hl"
+        uri = "file:///ffi.yl"
         server.documents[uri] = source
         hover, _ = server.handle({
             "jsonrpc": "2.0",
@@ -62,7 +62,7 @@ class LanguageServerTests(unittest.TestCase):
         )
 
         server = LanguageServer()
-        uri = "file:///imports.hl"
+        uri = "file:///imports.yl"
         server.documents[uri] = "import helpers\n"
         hover, _ = server.handle({
             "jsonrpc": "2.0",
@@ -77,7 +77,7 @@ class LanguageServerTests(unittest.TestCase):
 
     def test_definition_and_hover_for_variable_function_and_builtin(self):
         server = LanguageServer()
-        uri = "file:///sample.hl"
+        uri = "file:///sample.yl"
         source = (
             "define var number: int = 1\n"
             "func define identity value\n"
@@ -114,7 +114,7 @@ class LanguageServerTests(unittest.TestCase):
 
     def test_document_sync_publishes_and_clears_diagnostics(self):
         server = LanguageServer()
-        uri = "file:///sample.hl"
+        uri = "file:///sample.yl"
         _, published = server.handle({
             "jsonrpc": "2.0",
             "method": "textDocument/didOpen",

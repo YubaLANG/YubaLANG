@@ -71,19 +71,19 @@ def _run_case(program: Path) -> tuple[str, str]:
 
 
 def run_tests(path: Path) -> int:
-    """Run all .hl tests under a directory, or one .hl test file."""
+    """Run all .yl tests under a directory, or one .yl test file."""
     path = path.resolve()
 
-    if path.is_file() and path.suffix == ".hl":
+    if path.is_file() and path.suffix == ".yl":
         programs = [path]
     elif path.is_dir():
-        programs = sorted(path.rglob("*.hl"))
+        programs = sorted(path.rglob("*.yl"))
     else:
-        print(f"test: not a .hl file or directory: {path}", file=sys.stderr)
+        print(f"test: not a .yl file or directory: {path}", file=sys.stderr)
         return 2
 
     if not programs:
-        print(f"test: no .hl tests found in {path}", file=sys.stderr)
+        print(f"test: no .yl tests found in {path}", file=sys.stderr)
         return 1
 
     counts = {"PASS": 0, "FAIL": 0, "ERROR": 0}

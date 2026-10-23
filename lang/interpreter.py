@@ -146,7 +146,7 @@ def _module_file(module_name: str, runtime: Runtime, source_name: str) -> Path:
                 runtime.project_root = find_project_root(source_path)
         base = base_directory.joinpath(*parts)
 
-    candidates = (base.with_suffix(".hl"), base / "main.hl")
+    candidates = (base.with_suffix(".yl"), base / "main.yl")
     for candidate in candidates:
         if candidate.is_file():
             return candidate.resolve()
@@ -379,4 +379,4 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         run_file(sys.argv[1])
     else:
-        print("Usage: py YubaLANG.py <path_to_file.hl>")
+        print("Usage: py YubaLANG.py <path_to_file.yl>")

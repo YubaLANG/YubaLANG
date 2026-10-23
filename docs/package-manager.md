@@ -7,17 +7,17 @@ generated `yuba.lock.json`. Both files should be checked into version control.
 
 ```text
 YubaLANG package init
-YubaLANG main.hl
+YubaLANG main.yl
 ```
 
-`package init [directory]` creates a manifest and a starter `main.hl`. A
+`package init [directory]` creates a manifest and a starter `main.yl`. A
 manifest has the following fields:
 
 ```json
 {
   "name": "sample",
   "version": "0.1.0",
-  "entry": "main.hl",
+  "entry": "main.yl",
   "yubalang": "1.2",
   "dependencies": {}
 }
@@ -31,7 +31,7 @@ the runtime currently accepts `"yubalang": "1.2"`.
 {
   "name": "sample",
   "version": "0.1.0",
-  "entry": "main.hl",
+  "entry": "main.yl",
   "yubalang": "1.2",
   "dependencies": {
     "local_math": { "path": "../local_math" },
@@ -97,10 +97,10 @@ func call math.add 20 22 -> answer
 text output answer
 ```
 
-For a local import, `helpers` resolves to `helpers.hl` or `helpers/main.hl`
+For a local import, `helpers` resolves to `helpers.yl` or `helpers/main.yl`
 beside the importing file. Dotted imports follow directories, for example
-`import tools.math` resolves to `tools/math.hl` or
-`tools/math/main.hl`; without an explicit alias its namespace is `math`. For a
+`import tools.math` resolves to `tools/math.yl` or
+`tools/math/main.yl`; without an explicit alias its namespace is `math`. For a
 dependency import, the package manifest's `entry` is used. Imports are loaded
 once per run. A cycle is an error.
 

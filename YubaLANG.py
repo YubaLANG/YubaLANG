@@ -17,18 +17,18 @@ def _format_paths(paths: list[str], check: bool) -> int:
         path = Path(value)
         if path.is_dir():
             files.extend(
-                candidate for candidate in path.rglob("*.hl")
+                candidate for candidate in path.rglob("*.yl")
                 if not any(part.startswith(".") for part in candidate.relative_to(path).parts[:-1])
             )
-        elif path.is_file() and path.suffix == ".hl":
+        elif path.is_file() and path.suffix == ".yl":
             files.append(path)
         else:
-            print(f"fmt: not a .hl file or directory: {path}", file=sys.stderr)
+            print(f"fmt: not a .yl file or directory: {path}", file=sys.stderr)
             return 1
 
     files = sorted(set(files))
     if not files:
-        print("fmt: no .hl files found", file=sys.stderr)
+        print("fmt: no .yl files found", file=sys.stderr)
         return 1
 
     changed = False
@@ -76,22 +76,22 @@ def main():
         if arguments and arguments[0] in ("--check", "--write"):
             check = arguments.pop(0) == "--check"
         if not arguments:
-            print("Usage: py YubaLANG.py fmt [--check|--write] <file.hl|directory>...", file=sys.stderr)
+            print("Usage: py YubaLANG.py fmt [--check|--write] <file.yl|directory>...", file=sys.stderr)
             sys.exit(2)
         sys.exit(_format_paths(arguments, check))
 
     if len(sys.argv) >= 2 and sys.argv[1] == "test":
         if len(sys.argv) > 3:
-            print("Usage: py YubaLANG.py test [test-file.hl|test-directory]", file=sys.stderr)
+            print("Usage: py YubaLANG.py test [test-file.yl|test-directory]", file=sys.stderr)
             sys.exit(2)
         test_path = Path(sys.argv[2]) if len(sys.argv) == 3 else Path("tests/cases")
         sys.exit(run_tests(test_path))
 
     if len(sys.argv) != 2:
         print(
-            "Usage: py YubaLANG.py <file.hl> | --lsp | "
-            "fmt [--check|--write] <file.hl|directory>... | "
-            "test [test-file.hl|test-directory] | "
+            "Usage: py YubaLANG.py <file.yl> | --lsp | "
+            "fmt [--check|--write] <file.yl|directory>... | "
+            "test [test-file.yl|test-directory] | "
             "package <init|add|remove|install|update|list|check>"
         )
         sys.exit(1)

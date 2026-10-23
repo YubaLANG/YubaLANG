@@ -89,7 +89,7 @@ try {
     }
 
     Write-Output "Installed YubaLANG to $executable"
-    Write-Output "Open a new terminal, then run: YubaLANG.exe path\to\program.hl"
+    Write-Output "Open a new terminal, then run: YubaLANG.exe path\to\program.yl"
     Write-Warning "This executable is unsigned; Windows may display a SmartScreen warning."
 } finally {
     if (Test-Path -LiteralPath $temporaryDirectory) {
