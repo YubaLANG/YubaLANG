@@ -187,7 +187,7 @@ def _execute_import(parts: list[str], runtime: Runtime, source_name: str) -> Non
     runtime.import_stack.append(key)
     try:
         try:
-            lines = module_path.read_text(encoding="utf-8").splitlines()
+            lines = module_path.read_text(encoding="utf-8-sig").splitlines()
         except (OSError, UnicodeError) as error:
             raise ValueError(f"Cannot read module '{module_path}': {error}") from error
         runtime.current_namespaces.append(namespace)
@@ -360,7 +360,7 @@ def execute_lines(
 
 
 def run_file(filename: str) -> None:
-    with open(filename, "r", encoding="utf-8") as source_file:
+    with open(filename, "r", encoding="utf-8-sig") as source_file:
         lines = source_file.readlines()
     runtime = Runtime()
     runtime.project_root = find_project_root(Path(filename))

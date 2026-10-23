@@ -29,6 +29,16 @@ class RuntimeDiagnosticTests(unittest.TestCase):
         self.assertIn("Did you mean 'count'?", diagnostic)
         self.assertNotIn("Traceback", diagnostic)
 
+    def test_run_file_accepts_utf8_bom(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "bom.hl"
+            source.write_text("text output 'hello'\n", encoding="utf-8-sig")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                run_file(str(source))
+
+        self.assertEqual(output.getvalue(), "hello\n")
+
     def test_function_error_keeps_original_source_line(self):
         output = io.StringIO()
         source = [

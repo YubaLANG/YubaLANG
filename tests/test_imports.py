@@ -8,6 +8,28 @@ from lang.interpreter import Runtime, execute_lines, run_file
 
 
 class ImportTests(unittest.TestCase):
+    def test_import_accepts_utf8_bom(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "library.hl").write_text(
+                "func define answer\n    return 42\nendfunc\n",
+                encoding="utf-8-sig",
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                execute_lines(
+                    [
+                        "import library",
+                        "define var result: int = 0",
+                        "func call library.answer -> result",
+                        "text output result",
+                    ],
+                    Runtime(),
+                    str(root / "main.hl"),
+                )
+
+        self.assertEqual(output.getvalue(), "42\n")
+
     def test_imports_and_calls_namespaced_functions_with_private_helpers(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
