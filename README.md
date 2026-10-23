@@ -11,3 +11,11 @@ A fast programming language with a hierarchical syntax built for modern programm
 * [Projects, imports, and package management](docs/package-manager.md)
 * [Calling C functions](docs/c-abi.md)
 * [Runnable example programs](examples/)
+
+## License
+
+YubaLANG is available under the custom [Yuba Non-Commercial Software
+License](LICENSE). It permits copying, modification, and redistribution for
+non-commercial purposes with attribution. Commercial use requires prior
+written permission. This is a source-available license, not an OSI-approved
+open-source license.

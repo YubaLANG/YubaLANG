@@ -1,0 +1,52 @@
+YUBA NON-COMMERCIAL SOFTWARE LICENSE
+Version 1.0
+
+Copyright (c) 2026 YubaLANG contributors.
+
+This license applies to the software and accompanying materials in this
+repository that are provided under this license ("Software"). Third-party
+materials remain subject to their own licenses.
+
+1. Permission
+
+You may use, reproduce, modify, and distribute the Software, including
+modified versions, solely for non-commercial purposes, provided that you:
+
+  a. give reasonable credit to the original project and its contributors;
+  b. retain this license and all copyright, attribution, and disclaimer
+     notices in copies of the Software; and
+  c. clearly identify modified files or versions as modified.
+
+When distributing the Software or a modified version, you must include this
+license and license the portions derived from the Software under these same
+terms. You may not impose additional restrictions that prevent recipients
+from exercising the permissions granted by this license.
+
+2. Non-commercial use
+
+"Non-commercial" means use that is not primarily intended for or directed
+toward commercial advantage or monetary compensation. Use of the Software
+as part of a commercial product or service, or in the operation or promotion
+of a business for commercial advantage, is commercial use even if the
+Software itself is provided without charge.
+
+Any commercial use requires prior written permission from the applicable
+copyright holder(s).
+
+3. Restrictions and reservation of rights
+
+No permission is granted to use the names, logos, or trademarks of the
+project or its contributors to imply endorsement. All rights not expressly
+granted here, including all commercial-use rights, are reserved.
+
+4. Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE
+OR ITS USE.
+
+This is a custom, source-available license and is not an OSI-approved
+open-source license.
