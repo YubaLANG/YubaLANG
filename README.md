@@ -15,6 +15,8 @@ A fast programming language with a hierarchical syntax built for modern programm
 
 Run `py -3 YubaLANG.py check <file.yl>` for non-executing syntax and
 statically-detectable type diagnostics.
+The [language reference](docs/1.2-docs.md#records) describes user-defined
+records.
 
 ## License
 

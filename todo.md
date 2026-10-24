@@ -59,12 +59,15 @@ programs and imports installed packages.
   variable lifetime and no accidental global leakage.
 - [ ] Support closures and first-class functions with defined capture and
   lifetime semantics.
-- [ ] Expand function parameters to support named arguments, defaults, and
-  variadic arguments, with unambiguous call rules.
+- [x] Expand function parameters to support named arguments and defaults with
+  defined ordering, duplicate, and missing-argument rules.
+- [x] Add a final `*name` parameter that collects extra positional arguments
+  into a tuple.
 - [ ] Add a documented export/visibility model for modules instead of
   relying only on all-functions-visible namespace behavior.
-- [ ] Add user-defined records or structs with field access, construction,
-  equality, and a migration path to richer object features.
+- [x] Add user-defined records with typed field access, construction, and
+  structural equality; defer class-based extensions until semantics are set.
+- [x] Document record mutation and aliasing semantics.
 - [ ] Evaluate class-based object orientation only after record, method,
   visibility, inheritance, and initialization semantics are designed.
 - [ ] Add collection indexing, safe mutation, slicing, iteration protocols,
@@ -80,8 +83,8 @@ programs and imports installed packages.
   detectable mismatches, while leaving dynamic cases to runtime.
 - [ ] Define type inference, union/optional types, function types, and
   generic types before implementing advanced annotations.
-- [ ] Add structured language exceptions with throw/raise, catch, finally,
-  and stack traces, preserving concise diagnostics for uncaught errors.
+- [x] Add structured language exceptions with throw, catch, finally, and
+  source-located call frames for uncaught errors.
 - [ ] Define resource cleanup and deterministic close behavior for files,
   iterators, and future native resources.
 - [x] Track opened files across function scopes, close them at file-run
@@ -130,7 +133,7 @@ programs and imports installed packages.
   never imply that running third-party packages is sandboxed.
 - [x] Document that imported code runs with the program's privileges and is
   not sandboxed.
-- [ ] Specify FFI ABI, ownership, string/buffer lifetime, error propagation,
+- [x] Specify the current FFI ABI, ownership limitations, error propagation,
   and supported platforms before broadening native interop.
 - [ ] Consider a safe extension mechanism for non-C host integrations only
   after the C ABI is stable.

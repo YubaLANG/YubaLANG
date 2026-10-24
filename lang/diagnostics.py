@@ -18,8 +18,9 @@ _COMMANDS = {
     "callable", "chr", "close", "compare", "continue", "convert", "define", "dict",
     "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "id",
     "if", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
-    "range", "repr", "return", "reversed", "set", "setattr", "slice",
-    "sorted", "text", "tuple", "type", "vars", "wait", "zip",
+    "range", "record", "repr", "return", "reversed", "set", "setattr", "slice",
+    "sorted", "text", "throw", "try", "catch", "finally", "endtry", "tuple",
+    "type", "vars", "wait", "zip",
 }
 
 
@@ -54,7 +55,7 @@ def _context_hint(
 
     match = _UNKNOWN_TYPE.fullmatch(message)
     if match:
-        suggestion = _closest(match.group(1), set(TYPES))
+        suggestion = _closest(match.group(1), set(TYPES) | set(runtime.records))
         return f"Did you mean '{suggestion}'?" if suggestion else None
 
     match = _IMPORT_NOT_FOUND.match(message)
@@ -136,4 +137,6 @@ def format_diagnostic(
     hint = _context_hint(error, runtime, source_name)
     if hint:
         output.append(f"  hint: {hint}")
+    for function_name, call_source, call_line in reversed(runtime.call_stack):
+        output.append(f"  at {function_name} ({call_source}:{call_line})")
     return "\n".join(output)

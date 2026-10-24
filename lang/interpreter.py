@@ -15,7 +15,14 @@ from .packages import (
     resolve_dependency,
     resolve_entry,
 )
-from .runtime import MAX_FUNCTION_CALL_DEPTH, Runtime, TYPES, UserFunction
+from .runtime import (
+    MAX_FUNCTION_CALL_DEPTH,
+    LanguageException,
+    RecordValue,
+    Runtime,
+    TYPES,
+    UserFunction,
+)
 from .string_builtins import resolve
 
 
@@ -34,6 +41,21 @@ class ContinueException(Exception):
     pass
 
 
+class RuntimeErrorSignal(Exception):
+    def __init__(
+        self,
+        error: Exception,
+        source_name: str,
+        line_number: int,
+        source_line: str,
+    ) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.source_name = source_name
+        self.line_number = line_number
+        self.source_line = source_line
+
+
 @lru_cache(maxsize=4096)
 def _split_cached(line: str) -> tuple[str, ...]:
     try:
@@ -47,6 +69,8 @@ def _split(line: str) -> list[str]:
 
 
 def _type_of(value: Any) -> str:
+    if isinstance(value, RecordValue):
+        return value.record_type
     if isinstance(value, bool):
         return "bool"
     for name in ("int", "float", "string", "list", "dict", "set", "tuple", "bytes", "bytearray"):
@@ -73,7 +97,12 @@ def interpret(
         )
 
 
-def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
+def _invoke_function(
+    name: str,
+    arguments: list[Any],
+    runtime: Runtime,
+    keyword_arguments: dict[str, Any] | None = None,
+) -> Any:
     resolved_name = runtime.resolve_function(name)
     if resolved_name is None:
         raise ValueError(f"Function '{name}' is not defined.")
@@ -82,19 +111,53 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
             f"Maximum function call depth ({MAX_FUNCTION_CALL_DEPTH}) exceeded."
         )
     function = runtime.functions[resolved_name]
-    if len(arguments) != len(function.parameters):
+    keyword_arguments = keyword_arguments or {}
+    if function.variadic_parameter is None and len(arguments) > len(function.parameters):
         raise TypeError(
             f"Function '{name}' expects {len(function.parameters)} argument(s), "
-            f"but got {len(arguments)}."
+            f"but got at least {len(arguments)}."
         )
 
+    positional_count = min(len(arguments), len(function.parameters))
+    bound_arguments = dict(zip(function.parameters, arguments[:positional_count]))
+    extra_arguments = arguments[positional_count:]
+    for parameter, value in keyword_arguments.items():
+        if parameter not in function.parameters:
+            raise TypeError(f"Function '{name}' has no parameter named '{parameter}'.")
+        if parameter in bound_arguments:
+            raise TypeError(f"Function '{name}' got multiple values for '{parameter}'.")
+        bound_arguments[parameter] = value
+    missing = [
+        parameter for parameter in function.parameters
+        if parameter not in bound_arguments and parameter not in function.defaults
+    ]
+    if missing:
+        if not function.defaults and not keyword_arguments:
+            raise TypeError(
+                f"Function '{name}' expects {len(function.parameters)} argument(s), "
+                f"but got {len(arguments)}."
+            )
+        raise TypeError(
+            f"Function '{name}' is missing required argument(s): {', '.join(missing)}."
+        )
+    bound_arguments.update({
+        parameter: value for parameter, value in function.defaults.items()
+        if parameter not in bound_arguments
+    })
     local_scope = {
-        parameter: {"type": _type_of(value), "value": value}
-        for parameter, value in zip(function.parameters, arguments)
+        parameter: {"type": _type_of(bound_arguments[parameter]), "value": bound_arguments[parameter]}
+        for parameter in function.parameters
     }
+    if function.variadic_parameter is not None:
+        local_scope[function.variadic_parameter] = {
+            "type": "tuple",
+            "value": tuple(extra_arguments),
+        }
     runtime.scopes.append(local_scope)
     runtime.current_namespaces.append(function.namespace)
     runtime.function_call_depth += 1
+    call_source, call_line = runtime.current_location
+    runtime.call_stack.append((name, call_source, call_line))
     try:
         execute_lines(
             function.body,
@@ -106,6 +169,7 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
     except ReturnException as result:
         return result.value if result.has_value else None
     finally:
+        runtime.call_stack.pop()
         runtime.function_call_depth -= 1
         runtime.current_namespaces.pop()
         runtime.scopes.pop()
@@ -126,8 +190,23 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
             raise SyntaxError("Return destination must follow '->'.")
         destination = call_parts[-1]
         call_parts = call_parts[:arrow]
-    arguments = [resolve(argument, runtime) for argument in call_parts]
-    result = _invoke_function(name, arguments, runtime)
+    arguments = []
+    keyword_arguments: dict[str, Any] = {}
+    saw_keyword = False
+    for argument in call_parts:
+        parameter, separator, value = argument.partition("=")
+        if separator and parameter.isidentifier():
+            if not value:
+                raise SyntaxError(f"Missing value for named argument '{parameter}'.")
+            saw_keyword = True
+            if parameter in keyword_arguments:
+                raise TypeError(f"Named argument '{parameter}' was supplied more than once.")
+            keyword_arguments[parameter] = resolve(value, runtime)
+        else:
+            if saw_keyword:
+                raise SyntaxError("Positional arguments must come before named arguments.")
+            arguments.append(resolve(argument, runtime))
+    result = _invoke_function(name, arguments, runtime, keyword_arguments)
     if destination is not None:
         if result is None:
             raise ValueError(f"Function '{name}' did not return a value.")
@@ -211,6 +290,106 @@ def _execute_import(parts: list[str], runtime: Runtime, source_name: str) -> Non
         runtime.import_stack.pop()
 
 
+def _execute_try_block(
+    lines: list[str],
+    runtime: Runtime,
+    source_name: str,
+    line_numbers: list[int],
+    namespace: str | None,
+    start: int,
+) -> int:
+    sections: dict[str, tuple[list[str], list[int]]] = {
+        "try": ([], []), "catch": ([], []), "finally": ([], [])
+    }
+    catch_name: str | None = None
+    has_catch = False
+    section = "try"
+    depth = 1
+    index = start + 1
+    while index < len(lines):
+        source_line = lines[index]
+        try:
+            parts = _split(source_line.strip()) if source_line.strip() else []
+        except SyntaxError:
+            parts = []
+        command = parts[0] if parts else ""
+        if command == "try":
+            depth += 1
+        elif command == "endtry":
+            depth -= 1
+            if depth == 0:
+                break
+        elif depth == 1 and command == "catch":
+            if section != "try" or len(parts) not in (1, 2):
+                raise SyntaxError("Usage: catch [exception_variable], before finally.")
+            if len(parts) == 2 and not parts[1].isidentifier():
+                raise SyntaxError("Catch variable must be an identifier.")
+            catch_name = parts[1] if len(parts) == 2 else None
+            has_catch = True
+            section = "catch"
+            index += 1
+            continue
+        elif depth == 1 and command == "finally":
+            if section == "finally" or len(parts) != 1:
+                raise SyntaxError("Usage: finally, after catch.")
+            section = "finally"
+            index += 1
+            continue
+        if section != "try" or command != "catch":
+            sections[section][0].append(source_line)
+            sections[section][1].append(line_numbers[index])
+        index += 1
+    if index == len(lines):
+        raise SyntaxError("Missing endtry for try block.")
+
+    try:
+        signal: RuntimeErrorSignal | None = None
+        runtime.exception_capture_depth += 1
+        try:
+            try_lines, try_numbers = sections["try"]
+            execute_lines(
+                try_lines, runtime, source_name, try_numbers, namespace
+            )
+        except RuntimeErrorSignal as error_signal:
+            signal = error_signal
+        finally:
+            runtime.exception_capture_depth -= 1
+
+        if signal is not None:
+            if not has_catch:
+                if runtime.exception_capture_depth == 0:
+                    print(format_diagnostic(
+                        signal.error, signal.source_name, signal.line_number,
+                        signal.source_line, runtime,
+                    ))
+                    raise SystemExit(1) from signal.error
+                raise signal
+            caught_value = (
+                signal.error.value
+                if isinstance(signal.error, LanguageException)
+                else str(signal.error)
+            )
+            if catch_name is not None:
+                runtime.scopes.append({})
+                runtime.define_var(catch_name, _type_of(caught_value), caught_value)
+            try:
+                execute_lines(
+                    sections["catch"][0], runtime, source_name,
+                    sections["catch"][1], namespace,
+                )
+            finally:
+                if catch_name is not None:
+                    runtime.scopes.pop()
+    finally:
+        runtime.exception_capture_depth -= 1
+        finally_lines, finally_numbers = sections["finally"]
+        if finally_lines:
+            execute_lines(
+                finally_lines, runtime, source_name, finally_numbers, namespace
+            )
+    return index
+
+
 def execute_lines(
     lines: list[str],
     runtime: Runtime | None = None,
@@ -234,6 +413,7 @@ def execute_lines(
             continue
 
         try:
+            runtime.current_location = (source_name, statement_line)
             parts = _split(raw_line)
             command = parts[0] if parts else ""
             if command == "return":
@@ -243,6 +423,19 @@ def execute_lines(
                 raise BreakException()
             if command == "continue":
                 raise ContinueException()
+            if command == "throw":
+                if len(parts) != 2:
+                    raise SyntaxError("Usage: throw <value>")
+                raise LanguageException(resolve(parts[1], runtime))
+
+            if command == "try":
+                if len(parts) != 1:
+                    raise SyntaxError("Usage: try")
+                index = _execute_try_block(
+                    lines, runtime, source_name, line_numbers, namespace, index
+                )
+                index += 1
+                continue
 
             if command == "if":
                 if len(parts) != 2:
@@ -300,8 +493,41 @@ def execute_lines(
 
             elif command == "func" and len(parts) >= 3 and parts[1] == "define":
                 function_name = parts[2]
-                parameters = parts[3:]
-                if len(set(parameters)) != len(parameters):
+                parameters = []
+                defaults = {}
+                variadic_parameter = None
+                optional_seen = False
+                declarations = parts[3:]
+                for declaration_index, declaration in enumerate(declarations):
+                    if declaration.startswith("*"):
+                        parameter = declaration[1:]
+                        if (
+                            not parameter.isidentifier()
+                            or declaration_index != len(declarations) - 1
+                            or variadic_parameter is not None
+                        ):
+                            raise SyntaxError(
+                                "A variadic parameter must be a final '*name' parameter."
+                            )
+                        variadic_parameter = parameter
+                        continue
+                    parameter, separator, default_value = declaration.partition("=")
+                    if not parameter.isidentifier() or (separator and not default_value):
+                        raise SyntaxError(
+                            "Function parameters must be identifiers or name=value defaults."
+                        )
+                    if separator:
+                        optional_seen = True
+                        defaults[parameter] = resolve(default_value, runtime)
+                    elif optional_seen:
+                        raise SyntaxError(
+                            "Required function parameters must precede default parameters."
+                        )
+                    parameters.append(parameter)
+                if (
+                    len(set(parameters)) != len(parameters)
+                    or variadic_parameter in parameters
+                ):
                     raise SyntaxError(f"Function '{function_name}' has duplicate parameters.")
                 body = []
                 body_line_numbers = []
@@ -316,7 +542,8 @@ def execute_lines(
                     f"{namespace}.{function_name}" if namespace else function_name
                 )
                 runtime.functions[qualified_name] = UserFunction(
-                    parameters, body, source_name, body_line_numbers, namespace or ""
+                    parameters, body, source_name, body_line_numbers,
+                    namespace or "", defaults, variadic_parameter,
                 )
 
             elif command == "func" and len(parts) >= 3 and parts[1] == "call":
@@ -364,8 +591,12 @@ def execute_lines(
         except (
             SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError,
             KeyError, AttributeError, OverflowError, OSError, EOFError, RecursionError,
-            AssertionError, MemoryError,
+            AssertionError, MemoryError, LanguageException,
         ) as error:
+            if runtime.exception_capture_depth:
+                raise RuntimeErrorSignal(
+                    error, source_name, statement_line, source_line
+                ) from error
             print(format_diagnostic(error, source_name, statement_line, source_line, runtime))
             raise SystemExit(1) from error
         index += 1

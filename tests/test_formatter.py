@@ -47,6 +47,17 @@ class FormatterTests(unittest.TestCase):
         with self.assertRaisesRegex(FormatError, r"line 1: endif without a matching block"):
             format_source("endif\n")
 
+    def test_formats_exception_blocks(self):
+        self.assertEqual(
+            format_source(
+                'try\nthrow "problem"\ncatch error\ntext output error\n'
+                'finally\ntext output "done"\nendtry\n'
+            ),
+            'try\n    throw "problem"\ncatch error\n'
+            '    text output error\nfinally\n'
+            '    text output "done"\nendtry\n',
+        )
+
     def test_check_accepts_windows_line_endings(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "sample.yl"

@@ -89,6 +89,8 @@ def _result_type(
         return parts[3], "int"
     if command == "open" and len(parts) == 4:
         return parts[3], "file"
+    if command == "record" and len(parts) >= 4 and parts[1] == "create":
+        return parts[3], parts[2]
     if command == "slice" and len(parts) in (5, 6):
         return parts[4], variables.get(parts[1])
     if command == "ffi" and len(parts) >= 7 and "->" in parts:
@@ -105,6 +107,7 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
     diagnostics: list[tuple[int, str]] = []
     globals_: dict[str, str | None] = {}
     scopes = [globals_]
+    record_types: dict[str, dict[str, str]] = {}
     function_depth = 0
 
     for line_number, line in enumerate(lines):
@@ -128,12 +131,41 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
             function_depth -= 1
             continue
         variables = scopes[-1]
+        if parts[0] == "record" and len(parts) >= 3 and parts[1] == "define":
+            fields = {}
+            for declaration in parts[3:]:
+                if declaration.count(":") == 1:
+                    field_name, field_type = declaration.split(":", 1)
+                    fields[field_name] = field_type
+            record_types[parts[2]] = fields
+            continue
+        if parts[0] == "record" and len(parts) >= 4 and parts[1] == "create":
+            record_name, variable_name = parts[2], parts[3]
+            fields = record_types.get(record_name)
+            if fields is not None:
+                values = parts[4:]
+                if len(values) != len(fields):
+                    diagnostics.append((
+                        line_number,
+                        f"Record '{record_name}' expects {len(fields)} field value(s), "
+                        f"but got {len(values)}.",
+                    ))
+                for (field_name, expected), token in zip(fields.items(), values):
+                    actual = _type_of(token, variables)
+                    if actual is not None and not _compatible(actual, expected):
+                        diagnostics.append((
+                            line_number,
+                            f"Type mismatch: field '{field_name}' requires '{expected}' "
+                            f"but value has type '{actual}'.",
+                        ))
+                variables[variable_name] = record_name
+            continue
         if (
             parts[0] == "define" and len(parts) >= 6 and parts[1] == "var"
             and parts[2].endswith(":") and parts[4] == "="
         ):
             name, declared = parts[2][:-1], parts[3]
-            if declared not in TYPES:
+            if declared not in TYPES and declared not in record_types:
                 continue
             actual = _type_of(" ".join(parts[5:]), variables)
             if actual is not None and not _compatible(actual, declared):

@@ -58,6 +58,44 @@ class LanguageServerTests(unittest.TestCase):
         self.assertIn("assert condition has type 'int'", diagnostics[0]["message"])
         self.assertIn("Unknown type: integer", diagnostics[1]["message"])
 
+    def test_record_types_are_recognized_and_field_mismatches_reported(self):
+        diagnostics = analyze_document(
+            "record define Point x:int y:string\n"
+            "define var origin: Point = origin\n"
+            "record create Point point 1 false\n"
+        )
+        self.assertTrue(any(item["code"] == "type-mismatch" for item in diagnostics))
+        self.assertFalse(any(item["code"] == "unknown-type" for item in diagnostics))
+        mismatch = next(item for item in diagnostics if item["code"] == "type-mismatch")
+        self.assertIn("field 'y' requires 'string'", mismatch["message"])
+
+    def test_function_parameter_defaults_are_validated(self):
+        self.assertEqual(
+            analyze_document(
+                "func define greet name greeting=hello\n"
+                "endfunc\n"
+            ),
+            [],
+        )
+        diagnostic = analyze_document(
+            "func define greet greeting=hello name\n"
+        )[0]
+        self.assertIn("required parameters must come first", diagnostic["message"])
+        self.assertEqual(
+            analyze_document("func define collect first *rest\nendfunc\n"),
+            [],
+        )
+
+    def test_exception_blocks_are_recognized_and_checked(self):
+        self.assertEqual(
+            analyze_document(
+                'try\nthrow "problem"\ncatch error\nfinally\nendtry\n'
+            ),
+            [],
+        )
+        diagnostics = analyze_document("catch error\n")
+        self.assertIn("without an open try block", diagnostics[0]["message"])
+
     def test_recognizes_ffi_command_and_provides_hover(self):
         source = 'ffi call "./libnative.so" add i32 i32 1 -> result\n'
         self.assertEqual(analyze_document(source), [])

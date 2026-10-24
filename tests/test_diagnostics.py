@@ -131,6 +131,39 @@ class RuntimeDiagnosticTests(unittest.TestCase):
         self.assertIn("Reduce the size of collections", output.getvalue())
         self.assertNotIn("Traceback", output.getvalue())
 
+    def test_uncaught_language_exception_has_original_location_and_stack(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            execute_lines(
+                [
+                    "func define fail",
+                    '    throw "broken"',
+                    "endfunc",
+                    "func call fail",
+                ],
+                source_name="exceptions.yl",
+            )
+        self.assertIn("exceptions.yl:2:5: error: Uncaught language exception: broken", output.getvalue())
+        self.assertIn("at fail (exceptions.yl:4)", output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
+
+    def test_finally_runs_before_an_uncaught_exception_exits(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            execute_lines(
+                [
+                    "try",
+                    '    throw "failure"',
+                    "finally",
+                    '    text output "cleanup"',
+                    "endtry",
+                ],
+                source_name="finally.yl",
+            )
+        diagnostic = output.getvalue()
+        self.assertIn("finally.yl:2:5: error: Uncaught language exception: failure", diagnostic)
+        self.assertIn("cleanup", diagnostic)
+
     def test_cli_reports_source_error_without_python_traceback(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "broken.yl"

@@ -173,6 +173,187 @@ class BuiltinCommandTests(unittest.TestCase):
         )
         self.assertEqual(runtime.require_var("result"), {"type": "float", "value": 2.0})
 
+    def test_records_support_construction_fields_assignment_equality_and_aliasing(self) -> None:
+        runtime = self.run_program(
+            """
+            record define Point x:int y:int
+            record create Point first 1 2
+            record create Point second 1 2
+            define var x: int = 0
+            define var has_height: bool = false
+            define var matches: bool = false
+            getattr first x x
+            hasattr first y has_height
+            compare first == second matches
+            define var alias: Point = first
+            setattr alias x 3
+            compare first == second matches
+            """
+        )
+        self.assertEqual(runtime.require_var("x")["value"], 1)
+        self.assertTrue(runtime.require_var("has_height")["value"])
+        self.assertFalse(runtime.require_var("matches")["value"])
+        self.assertEqual(runtime.require_var("first")["value"].fields["x"], 3)
+        self.assertIs(
+            runtime.require_var("alias")["value"],
+            runtime.require_var("first")["value"],
+        )
+
+    def test_record_creation_and_field_mutation_check_declared_types(self) -> None:
+        for source, message in (
+            (
+                "record define Point x:int\nrecord create Point point 'wrong'",
+                "Field 'x' of record 'Point' requires type 'int'.",
+            ),
+            (
+                "record define Point x:int\n"
+                "record create Point point 1\n"
+                "setattr point x 'wrong'",
+                "Field 'x' of record 'Point' requires type 'int'.",
+            ),
+        ):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                self.run_program(source)
+            self.assertIn(message, output.getvalue())
+
+    def test_records_can_be_passed_and_returned_through_functions(self) -> None:
+        runtime = self.run_program(
+            """
+            record define Point x:int
+            record create Point original 7
+            func define identity value
+                return value
+            endfunc
+            define var returned: Point = original
+            func call identity original -> returned
+            """
+        )
+        self.assertIs(
+            runtime.require_var("returned")["value"],
+            runtime.require_var("original")["value"],
+        )
+
+    def test_functions_accept_named_arguments_and_definition_time_defaults(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            runtime = self.run_program(
+                """
+                define var greeting: string = "hello"
+                func define announce name greeting_value=greeting
+                    text output name
+                    text output greeting_value
+                endfunc
+                func call announce name=Ada greeting_value="welcome"
+                func call announce name=Grace
+                """
+            )
+        self.assertEqual(output.getvalue().splitlines(), ["Ada", "welcome", "Grace", "hello"])
+        self.assertEqual(runtime.functions["announce"].defaults["greeting_value"], "hello")
+        self.assertNotIn("name", runtime.scopes[0])
+
+    def test_function_calls_report_invalid_named_and_missing_arguments(self) -> None:
+        cases = (
+            (
+                "func define greet name\nendfunc\nfunc call greet missing=Ada",
+                "has no parameter named 'missing'",
+            ),
+            (
+                "func define greet name\nendfunc\nfunc call greet Ada name=Grace",
+                "got multiple values for 'name'",
+            ),
+            (
+                "func define greet name\nendfunc\nfunc call greet",
+                "expects 1 argument(s), but got 0",
+            ),
+            (
+                "func define greet name\nendfunc\nfunc call greet name=Ada Grace",
+                "Positional arguments must come before named arguments.",
+            ),
+        )
+        for source, message in cases:
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                self.run_program(source)
+            self.assertIn(message, output.getvalue())
+
+    def test_function_variadic_parameters_collect_extra_values_into_a_tuple(self) -> None:
+        runtime = self.run_program(
+            """
+            func define collect first *rest
+                return rest
+            endfunc
+            define var values: tuple = ()
+            func call collect 1 2 3 -> values
+            """
+        )
+        self.assertEqual(runtime.require_var("values")["value"], (2, 3))
+
+    def test_throw_catch_and_finally_handle_language_exceptions(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.run_program(
+                """
+                try
+                    throw "problem"
+                catch error
+                    text output error
+                finally
+                    text output "cleanup"
+                endtry
+                """
+            )
+        self.assertEqual(output.getvalue().splitlines(), [
+            "problem", "cleanup",
+        ])
+
+    def test_try_catches_runtime_errors_and_finally_runs_without_exceptions(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.run_program(
+                """
+                try
+                    text output missing
+                catch problem
+                    text output problem
+                finally
+                    text output "cleanup"
+                endtry
+                try
+                    text output "ok"
+                catch
+                    text output "unexpected"
+                finally
+                    text output "done"
+                endtry
+                """
+            )
+        self.assertEqual(output.getvalue().splitlines(), [
+            "Variable 'missing' is not defined.",
+            "cleanup",
+            "ok",
+            "done",
+        ])
+
+    def test_finally_runs_when_function_returns_from_try(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            runtime = self.run_program(
+                """
+                func define answer
+                    try
+                        return 42
+                    finally
+                        text output "finalized"
+                    endtry
+                endfunc
+                define var result: int = 0
+                func call answer -> result
+                """
+            )
+        self.assertEqual(runtime.require_var("result")["value"], 42)
+        self.assertEqual(output.getvalue(), "finalized\n")
+
     def test_existing_collection_and_utility_commands(self) -> None:
         runtime = self.run_program(
             """

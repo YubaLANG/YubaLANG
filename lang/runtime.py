@@ -22,6 +22,23 @@ TYPES = {
 MAX_FUNCTION_CALL_DEPTH = 128
 
 
+class LanguageException(ValueError):
+    def __init__(self, value: Any) -> None:
+        super().__init__(f"Uncaught language exception: {value}")
+        self.value = value
+
+
+@dataclass
+class RecordDefinition:
+    fields: dict[str, str]
+
+
+@dataclass
+class RecordValue:
+    record_type: str
+    fields: dict[str, Any]
+
+
 @dataclass
 class UserFunction:
     parameters: list[str]
@@ -29,12 +46,15 @@ class UserFunction:
     source_name: str = "<memory>"
     line_numbers: list[int] = field(default_factory=list)
     namespace: str = ""
+    defaults: dict[str, Any] = field(default_factory=dict)
+    variadic_parameter: str | None = None
 
 
 @dataclass
 class Runtime:
     scopes: list[dict[str, dict[str, Any]]] = field(default_factory=lambda: [{}])
     functions: dict[str, UserFunction] = field(default_factory=dict)
+    records: dict[str, RecordDefinition] = field(default_factory=dict)
     native_libraries: dict[str, Any] = field(default_factory=dict)
     project_root: Path | None = None
     module_aliases: dict[str, str] = field(default_factory=dict)
@@ -44,6 +64,9 @@ class Runtime:
     current_namespaces: list[str] = field(default_factory=list)
     function_call_depth: int = 0
     open_files: list[IOBase] = field(default_factory=list)
+    exception_capture_depth: int = 0
+    call_stack: list[tuple[str, str, int]] = field(default_factory=list)
+    current_location: tuple[str, int] = ("<memory>", 1)
 
     def resolve_function(self, name: str) -> str | None:
         if "." in name:
@@ -108,19 +131,9 @@ class Runtime:
     def assign_var(self, name: str, value: Any) -> None:
         variable = self.require_var(name)
         var_type = variable["type"]
-        expected_type = TYPES[var_type]
-        if var_type == "iterator":
-            matches = hasattr(value, "__next__")
-        elif var_type == "file":
-            matches = isinstance(value, IOBase)
-        elif var_type == "int":
-            matches = isinstance(value, int) and not isinstance(value, bool)
-        elif var_type == "float":
-            matches = isinstance(value, (int, float)) and not isinstance(value, bool)
-            if matches:
-                value = float(value)
-        else:
-            matches = isinstance(value, expected_type)
+        matches = self.value_matches_type(var_type, value)
+        if var_type == "float" and matches:
+            value = float(value)
         if not matches:
             actual_type = type(value).__name__
             raise TypeError(
@@ -128,6 +141,19 @@ class Runtime:
                 f"of type '{var_type}'."
             )
         self.update_var(name, var_type, value)
+
+    def value_matches_type(self, var_type: str, value: Any) -> bool:
+        if var_type in self.records:
+            return isinstance(value, RecordValue) and value.record_type == var_type
+        if var_type == "iterator":
+            return hasattr(value, "__next__")
+        if var_type == "file":
+            return isinstance(value, IOBase)
+        if var_type == "int":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if var_type == "float":
+            return isinstance(value, (int, float)) and not isinstance(value, bool)
+        return var_type in TYPES and isinstance(value, TYPES[var_type])
 
     def require_var(self, name: str) -> dict[str, Any]:
         result = self.get_var(name)

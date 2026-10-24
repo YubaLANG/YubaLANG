@@ -17,9 +17,10 @@ _COMMANDS = {
     "callable", "chr", "close", "compare", "continue", "convert", "define", "dict",
     "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "if",
     "id", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
-    "range", "repr",
+    "range", "record", "repr",
     "return", "reversed", "set", "setattr", "slice", "sorted", "text",
-    "tuple", "type", "vars", "wait", "zip",
+    "throw", "try", "catch", "finally", "endtry", "tuple", "type", "vars",
+    "wait", "zip",
 }
 _ARITY: dict[str, tuple[int, ...]] = {
     "all": (3,), "any": (3,), "ascii": (3,), "bool": (3,),
@@ -36,6 +37,10 @@ _HOVER: dict[str, str] = {
     "define": "**`define var <name>: <type> = <value>`** declares a variable.",
     "assert": "**`assert <boolean> [message]`** raises a source-located error when false.",
     "close": "**`close <file_variable>`** closes an open file.",
+    "record": (
+        "**`record define <name> <field>:<type>...`** defines a record; "
+        "**`record create <type> <variable> <values>...`** constructs one."
+    ),
     "convert": "**`convert <variable> to <type>`** changes a variable's value and type.",
     "arith": "**`arith <operation> <value> [value]`** performs arithmetic and prints the result.",
     "compare": "**`compare <left> <operator> <right> <bool_variable>`** stores a comparison.",
@@ -189,6 +194,7 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
     lines = source.splitlines()
     diagnostics: list[dict[str, Any]] = []
     blocks: list[tuple[str, int]] = []
+    record_types: set[str] = set()
 
     for line_number, raw_line in enumerate(lines):
         line = raw_line.strip()
@@ -205,15 +211,65 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
         command = parts[0]
         error: str | None = None
         code = "invalid-syntax"
-        if command == "if":
+        if command == "try":
+            if len(parts) != 1:
+                error = "Usage: try"
+            else:
+                blocks.append(("try", line_number))
+        elif command in ("catch", "finally"):
+            if not blocks or blocks[-1][0] != "try":
+                error = f"Unexpected '{command}' without an open try block."
+            elif command == "catch" and (
+                len(parts) not in (1, 2)
+                or (len(parts) == 2 and not _IDENTIFIER.fullmatch(parts[1]))
+            ):
+                error = "Usage: catch [exception_variable]"
+            elif command == "finally" and len(parts) != 1:
+                error = "Usage: finally"
+        elif command == "throw" and len(parts) != 2:
+            error = "Usage: throw <value>"
+        elif command == "if":
             if len(parts) != 2:
                 error = "Usage: if <condition>"
             else:
                 blocks.append(("if", line_number))
         elif command == "func":
             if len(parts) >= 3 and parts[1] == "define":
-                if not all(_IDENTIFIER.fullmatch(name) for name in parts[2:]):
-                    error = "Function name and parameters must be identifiers."
+                function_name = parts[2]
+                declarations = parts[3:]
+                variadic = [declaration for declaration in declarations if declaration.startswith("*")]
+                parameter_names = [
+                    declaration[1:] if declaration.startswith("*")
+                    else declaration.split("=", 1)[0]
+                    for declaration in declarations
+                ]
+                defaults_started = False
+                invalid_defaults = False
+                for declaration_index, declaration in enumerate(declarations):
+                    if declaration.startswith("*"):
+                        if (
+                            len(variadic) != 1
+                            or declaration_index != len(declarations) - 1
+                        ):
+                            invalid_defaults = True
+                        continue
+                    parameter, separator, default_value = declaration.partition("=")
+                    if separator:
+                        defaults_started = True
+                        invalid_defaults = invalid_defaults or not default_value
+                    elif defaults_started:
+                        invalid_defaults = True
+                if (
+                    not _IDENTIFIER.fullmatch(function_name)
+                    or not all(_IDENTIFIER.fullmatch(name) for name in parameter_names)
+                    or len(set(parameter_names)) != len(parameter_names)
+                ):
+                    error = "Function name and parameters must be unique identifiers."
+                elif invalid_defaults:
+                    error = (
+                        "Function defaults must use name=value syntax, required "
+                        "parameters must come first, and *name must be final."
+                    )
                 else:
                     blocks.append(("func", line_number))
             elif len(parts) < 3 or parts[1] != "call":
@@ -223,16 +279,16 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
                 error = "Usage: loop for <count> or loop while <condition>"
             else:
                 blocks.append(("loop", line_number))
-        elif command in ("elseif", "else", "endif", "endfunc", "endloop"):
+        elif command in ("elseif", "else", "endif", "endfunc", "endloop", "endtry"):
             expected = {"elseif": "if", "else": "if", "endif": "if",
-                        "endfunc": "func", "endloop": "loop"}[command]
+                        "endfunc": "func", "endloop": "loop", "endtry": "try"}[command]
             if len(parts) != 1 and command != "elseif":
                 error = f"'{command}' does not take arguments."
             elif command == "elseif" and len(parts) != 2:
                 error = "Usage: elseif <condition>"
             elif not blocks or blocks[-1][0] != expected:
                 error = f"Unexpected '{command}' without an open {expected} block."
-            elif command in ("endif", "endfunc", "endloop"):
+            elif command in ("endif", "endfunc", "endloop", "endtry"):
                 blocks.pop()
         elif command not in _COMMANDS:
             code = "unknown-command"
@@ -243,13 +299,30 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
                 or not parts[2].endswith(":") or parts[4] != "="
             ):
                 error = "Usage: define var <name>: <type> = <value>"
-            elif parts[3] not in TYPES:
+            elif parts[3] not in TYPES and parts[3] not in record_types:
                 code = "unknown-type"
                 error = f"Unknown type: {parts[3]}"
         elif command == "assert" and len(parts) not in (2, 3):
             error = "Usage: assert <boolean> [message]"
         elif command == "close" and len(parts) != 2:
             error = "Usage: close <file_variable>"
+        elif command == "record":
+            if len(parts) < 3 or parts[1] not in ("define", "create"):
+                error = (
+                    "Usage: record define <name> <field>:<type>... or "
+                    "record create <type> <variable> <field-value>..."
+                )
+            elif parts[1] == "define" and (
+                len(parts) < 4
+                or any(declaration.count(":") != 1 for declaration in parts[3:])
+            ):
+                error = "Record fields must use <field>:<type> syntax."
+            elif parts[1] == "define":
+                record_types.add(parts[2])
+            elif parts[1] == "create" and len(parts) < 4:
+                error = "Usage: record create <type> <variable> <field-value>..."
+            elif parts[1] == "create" and parts[2] not in record_types:
+                error = f"Unknown record type: {parts[2]}"
         elif command in _ARITY and len(parts) not in _ARITY[command]:
             error = f"Invalid {command} command or arguments."
         elif command == "import" and len(parts) == 4 and parts[2] != "as":

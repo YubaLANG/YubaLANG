@@ -6,7 +6,7 @@ from .collection_commands import execute_collection_command
 from .conversion import convert_value, parse_value
 from .ffi import execute_ffi
 from .io_commands import execute_io_command
-from .runtime import Runtime, TYPES
+from .runtime import RecordDefinition, RecordValue, Runtime, TYPES
 from .string_builtins import resolve
 
 
@@ -77,10 +77,44 @@ def execute_command(
         if len(parts) < 6 or parts[1] != "var" or not parts[2].endswith(":") or parts[4] != "=":
             raise SyntaxError("Usage: define var <name>: <type> = <value>")
         name, value_type = parts[2][:-1], parts[3]
-        if value_type not in TYPES:
+        if value_type not in TYPES and value_type not in runtime.records:
             raise ValueError(f"Unknown type: {value_type}")
-        value = parse_value(" ".join(parts[5:]), value_type, runtime)
+        if value_type in runtime.records:
+            source = " ".join(parts[5:])
+            variable = runtime.get_var(source)
+            if variable is None or variable["type"] != value_type:
+                raise TypeError(f"Expected a '{value_type}' record variable.")
+            value = variable["value"]
+        else:
+            value = parse_value(" ".join(parts[5:]), value_type, runtime)
         runtime.define_var(name, value_type, value)
+        return
+
+    if command == "record":
+        if len(parts) < 3 or parts[1] != "define":
+            if len(parts) >= 2 and parts[1] == "create":
+                _create_record(parts, runtime)
+                return
+            raise SyntaxError(
+                "Usage: record define <name> <field>:<type>... or "
+                "record create <type> <variable> <field-value>..."
+            )
+        name = parts[2]
+        if not name.isidentifier() or name in TYPES or name in runtime.records:
+            raise ValueError(f"Invalid or already defined record type '{name}'.")
+        if len(parts) < 4:
+            raise SyntaxError("A record must define at least one field.")
+        fields: dict[str, str] = {}
+        for declaration in parts[3:]:
+            if declaration.count(":") != 1:
+                raise SyntaxError("Record fields must use <field>:<type> syntax.")
+            field_name, field_type = declaration.split(":", 1)
+            if not field_name.isidentifier() or field_name in fields:
+                raise ValueError(f"Invalid or duplicate record field '{field_name}'.")
+            if field_type not in TYPES and field_type not in runtime.records:
+                raise ValueError(f"Unknown type: {field_type}")
+            fields[field_name] = field_type
+        runtime.records[name] = RecordDefinition(fields)
         return
 
     if command == "assert":
@@ -329,20 +363,80 @@ def _execute_attribute_command(parts: list[str], runtime: Runtime) -> None:
     command = parts[0]
     if len(parts) != 4:
         raise SyntaxError(f"Usage: {command} <variable> <attribute> <destination>")
-    obj_name, attr_name, destination = parts[1], resolve(parts[2], runtime), parts[3]
+    obj_name, attribute_token, destination = parts[1], parts[2], parts[3]
     variable = runtime.require_var(obj_name)
     obj = variable["value"]
-    if command == "getattr":
-        value = obj[attr_name] if isinstance(obj, dict) else getattr(obj, attr_name)
-        runtime.assign_var(destination, value)
-    elif command == "hasattr":
-        _assign(runtime, destination, attr_name in obj if isinstance(obj, dict) else hasattr(obj, attr_name))
+    if isinstance(obj, RecordValue):
+        quoted = (
+            len(attribute_token) >= 2
+            and attribute_token[0] == attribute_token[-1]
+            and attribute_token[0] in ("'", '"')
+        )
+        attr_name = resolve(attribute_token, runtime) if quoted else attribute_token
+        if attr_name not in obj.fields:
+            if command == "hasattr":
+                _assign(runtime, destination, False)
+                return
+            raise AttributeError(
+                f"Record '{variable['type']}' has no field '{attr_name}'."
+            )
+        if command == "getattr":
+            runtime.assign_var(destination, obj.fields[attr_name])
+        elif command == "hasattr":
+            _assign(runtime, destination, True)
+        else:
+            field_type = runtime.records[variable["type"]].fields[attr_name]
+            value = resolve(parts[3], runtime)
+            if not runtime.value_matches_type(field_type, value):
+                raise TypeError(
+                    f"Field '{attr_name}' of record '{variable['type']}' "
+                    f"requires type '{field_type}'."
+                )
+            if field_type == "float":
+                value = float(value)
+            obj.fields[attr_name] = value
     else:
-        value = resolve(parts[3], runtime)
-        if isinstance(obj, dict):
+        attr_name = resolve(attribute_token, runtime)
+        if command == "getattr":
+            value = obj[attr_name] if isinstance(obj, dict) else getattr(obj, attr_name)
+            runtime.assign_var(destination, value)
+        elif command == "hasattr":
+            _assign(runtime, destination, attr_name in obj if isinstance(obj, dict) else hasattr(obj, attr_name))
+        elif isinstance(obj, dict):
+            value = resolve(parts[3], runtime)
             obj[attr_name] = value
         else:
+            value = resolve(parts[3], runtime)
             setattr(obj, attr_name, value)
+
+
+def _create_record(parts: list[str], runtime: Runtime) -> None:
+    if len(parts) < 4:
+        raise SyntaxError("Usage: record create <type> <variable> <field-value>...")
+    if parts[2] not in runtime.records:
+        raise ValueError(f"Unknown record type: {parts[2]}")
+    record_type, variable_name = parts[2], parts[3]
+    definition = runtime.records[record_type]
+    field_names = list(definition.fields)
+    values = parts[4:]
+    if len(values) != len(field_names):
+        raise TypeError(
+            f"Record '{record_type}' expects {len(field_names)} field value(s), "
+            f"but got {len(values)}."
+        )
+    fields = {}
+    for field_name, token in zip(field_names, values):
+        value = resolve(token, runtime)
+        expected_type = definition.fields[field_name]
+        if not runtime.value_matches_type(expected_type, value):
+            raise TypeError(
+                f"Field '{field_name}' of record '{record_type}' "
+                f"requires type '{expected_type}'."
+            )
+        if expected_type == "float":
+            value = float(value)
+        fields[field_name] = value
+    runtime.define_var(variable_name, record_type, RecordValue(record_type, fields))
 
 
 def _execute_utility_command(parts: list[str], runtime: Runtime) -> None:

@@ -51,7 +51,7 @@ accepts `true` or `false` for its optional `reverse` argument.
 `map` and `filter` accept a built-in unary function name (such as `abs`, `int`,
 `float`, `str`, `bool`, `ascii`, `repr`, or `len`) or a user-defined function
 that takes one parameter and returns a value. Functions can be declared with
-parameters, called with arguments, and return a value:
+parameters, defaults, named arguments, and return values:
 
 ```hl
 func define is_positive value
@@ -67,6 +67,10 @@ filter is_positive numbers positives
 
 An explicit function result can be assigned with
 `func call <name> [arguments] -> <destination>`.
+Defaults are evaluated at definition time. Required parameters must precede
+defaulted parameters; positional call arguments must precede `name=value`
+arguments. A final `*name` parameter collects extra positional arguments into
+a tuple.
 
 ## Existing built-ins
 
@@ -99,6 +103,21 @@ define var ready: bool = true
 assert ready "the program is ready"
 ```
 
+Use `throw <value>` with `try`, optional `catch [name]`, and optional
+`finally` / `endtry` blocks for structured error handling. A named catch
+variable contains the thrown value or, for a runtime error, its message string.
+`finally` runs even when a function returns from inside the protected block.
+Uncaught errors retain their source location and function call frames.
+
 User-defined functions may be nested up to 128 calls deep. Exceeding this
 limit reports a source-located recursion error instead of exposing an
 interpreter traceback.
+
+## Records
+
+Use `record define <Name> <field>:<type>...` to declare a record and
+`record create <Name> <variable> <value>...` to construct it. Field values
+follow declaration order. `getattr`, `hasattr`, and `setattr` access record
+fields; construction and mutation enforce field types. Records compare by type
+and field values. Assigning a record to another variable shares the same
+mutable value rather than making a copy.
