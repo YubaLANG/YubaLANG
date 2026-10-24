@@ -1,6 +1,7 @@
 """A lightweight stdio Language Server Protocol implementation for YubaLANG."""
 
 import json
+import difflib
 import re
 import sys
 from typing import Any, BinaryIO
@@ -397,7 +398,11 @@ def _symbols(source: str) -> dict[str, dict[str, int]]:
             if location:
                 definitions.setdefault(name, {"line": line_number, "character": location[1]})
         if len(parts) >= 4 and parts[:2] == ["func", "define"]:
-            for parameter in parts[3:]:
+            declarations = parts[3:]
+            if "->" in declarations:
+                declarations = declarations[:declarations.index("->")]
+            for parameter in declarations:
+                parameter = parameter.lstrip("*").split("=", 1)[0].partition(":")[0]
                 location = next(
                     ((word, column) for word, column in identifiers if word == parameter), None
                 )
@@ -406,6 +411,87 @@ def _symbols(source: str) -> dict[str, dict[str, int]]:
                         parameter, {"line": line_number, "character": location[1]}
                     )
     return definitions
+
+
+def _function_signatures(source: str) -> dict[str, tuple[list[str], str | None]]:
+    signatures = {}
+    for line in source.splitlines():
+        try:
+            parts = _split(line.strip())
+        except SyntaxError:
+            continue
+        if len(parts) >= 3 and parts[:2] == ["func", "define"]:
+            declarations = parts[3:]
+            return_type = None
+            if "->" in declarations:
+                return_index = declarations.index("->")
+                return_type = " ".join(declarations[return_index + 1:])
+                declarations = declarations[:return_index]
+            signatures[parts[2]] = (declarations, return_type)
+    return signatures
+
+
+def _document_symbols(source: str, uri: str) -> list[dict[str, Any]]:
+    result = []
+    for line_number, line in enumerate(source.splitlines()):
+        try:
+            parts = _split(line.strip())
+        except SyntaxError:
+            continue
+        if len(parts) >= 3 and parts[:2] in (
+            ["define", "var"], ["func", "define"], ["record", "define"],
+        ):
+            name = parts[2].removesuffix(":")
+            token = next(
+                ((word, column) for word, column in _identifier_positions(line) if word == name),
+                None,
+            )
+            if token is None:
+                continue
+            kind = {"define": 13, "func": 12, "record": 23}[parts[0]]
+            result.append({
+                "name": name,
+                "kind": kind,
+                "detail": (
+                    "Variable" if kind == 13 else
+                    "Function" if kind == 12 else "Record"
+                ),
+                "uri": uri,
+                "range": _range(line_number, 0, _utf16_length(line)),
+                "selectionRange": _range(
+                    line_number, token[1], token[1] + _utf16_length(name)
+                ),
+            })
+    return result
+
+
+def _references(
+    documents: dict[str, str],
+    name: str,
+    include_declaration: bool,
+) -> list[dict[str, Any]]:
+    locations = []
+    definitions = {
+        uri: _symbols(source).get(name)
+        for uri, source in documents.items()
+    }
+    for uri, source in documents.items():
+        for line_number, line in enumerate(source.splitlines()):
+            for word, start in _identifier_positions(line):
+                if word != name:
+                    continue
+                definition = definitions[uri]
+                if (
+                    not include_declaration and definition is not None
+                    and definition["line"] == line_number
+                    and definition["character"] == start
+                ):
+                    continue
+                locations.append({
+                    "uri": uri,
+                    "range": _range(line_number, start, start + _utf16_length(name)),
+                })
+    return locations
 
 
 def _word_at(source: str, line_number: int, utf16_column: int) -> tuple[str, int, int] | None:
@@ -451,6 +537,7 @@ def _apply_change(source: str, change: dict[str, Any]) -> str:
 class LanguageServer:
     def __init__(self) -> None:
         self.documents: dict[str, str] = {}
+        self.document_versions: dict[str, int] = {}
         self.shutdown_requested = False
         self.exit_requested = False
 
@@ -468,6 +555,13 @@ class LanguageServer:
                     "textDocumentSync": {"openClose": True, "change": 1},
                     "definitionProvider": True,
                     "hoverProvider": True,
+                    "completionProvider": {"triggerCharacters": ["."]},
+                    "signatureHelpProvider": {"triggerCharacters": [" ", "="]},
+                    "referencesProvider": True,
+                    "renameProvider": {"prepareProvider": True},
+                    "documentSymbolProvider": True,
+                    "workspaceSymbolProvider": True,
+                    "codeActionProvider": True,
                 },
                 "serverInfo": {"name": "YubaLANG"},
             }
@@ -481,20 +575,31 @@ class LanguageServer:
             document = params["textDocument"]
             uri, text = document["uri"], document["text"]
             self.documents[uri] = text
+            if "version" in document:
+                self.document_versions[uri] = document["version"]
             notifications.append(self._publish(uri, text))
             result = None
         elif method == "textDocument/didChange":
             document = params["textDocument"]
             uri = document["uri"]
-            text = self.documents[uri]
-            for change in params["contentChanges"]:
-                text = _apply_change(text, change)
-            self.documents[uri] = text
-            notifications.append(self._publish(uri, text))
+            version = document.get("version")
+            current_version = self.document_versions.get(uri)
+            if (
+                uri in self.documents
+                and (version is None or current_version is None or version > current_version)
+            ):
+                text = self.documents[uri]
+                for change in params["contentChanges"]:
+                    text = _apply_change(text, change)
+                self.documents[uri] = text
+                if version is not None:
+                    self.document_versions[uri] = version
+                notifications.append(self._publish(uri, text))
             result = None
         elif method == "textDocument/didClose":
             uri = params["textDocument"]["uri"]
             self.documents.pop(uri, None)
+            self.document_versions.pop(uri, None)
             notifications.append({
                 "jsonrpc": "2.0",
                 "method": "textDocument/publishDiagnostics",
@@ -539,6 +644,150 @@ class LanguageServer:
                         "contents": {"kind": "markdown", "value": hover_text},
                         "range": _range(params["position"]["line"], word[1], word[2]),
                     }
+        elif method == "textDocument/completion":
+            uri = params["textDocument"]["uri"]
+            source = self.documents.get(uri, "")
+            line_number = params["position"]["line"]
+            line = source.splitlines()[line_number] if line_number < len(source.splitlines()) else ""
+            column = _character_offset(line, params["position"]["character"])
+            prefix_match = re.search(r"[A-Za-z_]\w*$", line[:column])
+            prefix = prefix_match.group() if prefix_match else ""
+            candidates = set(_COMMANDS) | set(TYPES) | set(_symbols(source))
+            for source_text in self.documents.values():
+                candidates.update(_symbols(source_text))
+                candidates.update(
+                    match.group(1)
+                    for match in re.finditer(r"(?m)^\\s*import\\s+[\\w.]+\\s+as\\s+(\\w+)", source_text)
+                )
+            result = {
+                "isIncomplete": False,
+                "items": [
+                    {"label": name, "kind": 14 if name in _COMMANDS else 6}
+                    for name in sorted(candidates)
+                    if name.startswith(prefix)
+                ],
+            }
+        elif method == "textDocument/signatureHelp":
+            uri = params["textDocument"]["uri"]
+            source = self.documents.get(uri, "")
+            line_number = params["position"]["line"]
+            lines = source.splitlines()
+            line = lines[line_number] if 0 <= line_number < len(lines) else ""
+            prefix = line[:_character_offset(line, params["position"]["character"])]
+            call = re.search(r"\bfunc\s+call\s+([\w.]+)(?:\s+(.*))?$", prefix)
+            result = None
+            if call:
+                function_name = call.group(1).split(".")[-1]
+                signature = _function_signatures(source).get(function_name)
+                if signature is not None:
+                    parameter_names, return_type = signature
+                    label = f"{function_name}({', '.join(parameter_names)})"
+                    if return_type:
+                        label += f" -> {return_type}"
+                    parameters = [{"label": parameter} for parameter in parameter_names]
+                    result = {
+                        "signatures": [{
+                            "label": label,
+                            "parameters": parameters,
+                            "activeParameter": min(
+                                len((call.group(2) or "").split()),
+                                max(0, len(parameters) - 1),
+                            ),
+                        }],
+                        "activeSignature": 0,
+                        "activeParameter": min(
+                            len((call.group(2) or "").split()),
+                            max(0, len(parameters) - 1),
+                        ),
+                    }
+        elif method == "textDocument/references":
+            uri = params["textDocument"]["uri"]
+            source = self.documents.get(uri)
+            word = (
+                _word_at(source, params["position"]["line"], params["position"]["character"])
+                if source is not None else None
+            )
+            result = (
+                _references(
+                    self.documents, word[0],
+                    params.get("context", {}).get("includeDeclaration", False),
+                )
+                if word else []
+            )
+        elif method in ("textDocument/prepareRename", "textDocument/rename"):
+            uri = params["textDocument"]["uri"]
+            source = self.documents.get(uri)
+            word = (
+                _word_at(source, params["position"]["line"], params["position"]["character"])
+                if source is not None else None
+            )
+            if method == "textDocument/prepareRename":
+                result = (
+                    {"range": _range(params["position"]["line"], word[1], word[2]), "placeholder": word[0]}
+                    if word and word[0] in _symbols(source) else None
+                )
+            else:
+                new_name = params["newName"]
+                if not _IDENTIFIER.fullmatch(new_name):
+                    return ({
+                        "jsonrpc": "2.0", "id": request_id,
+                        "error": {"code": -32602, "message": "New name must be an identifier."},
+                    }, [])
+                if not word or word[0] not in _symbols(source):
+                    result = None
+                else:
+                    edits = {}
+                    for location in _references(self.documents, word[0], True):
+                        edits.setdefault(location["uri"], []).append({
+                            "range": location["range"], "newText": new_name,
+                        })
+                    result = {"changes": edits}
+        elif method == "textDocument/documentSymbol":
+            uri = params["textDocument"]["uri"]
+            result = _document_symbols(self.documents.get(uri, ""), uri)
+        elif method == "workspace/symbol":
+            query = params.get("query", "").casefold()
+            result = [
+                symbol
+                for uri, source in self.documents.items()
+                for symbol in _document_symbols(source, uri)
+                if query in symbol["name"].casefold()
+            ]
+        elif method == "textDocument/codeAction":
+            uri = params["textDocument"]["uri"]
+            source = self.documents.get(uri, "")
+            diagnostics = params.get("context", {}).get("diagnostics", [])
+            actions = []
+            for diagnostic in diagnostics:
+                if diagnostic.get("code") != "unknown-command":
+                    continue
+                match = re.search(r"Unknown command: ([A-Za-z_]\w*)", diagnostic["message"])
+                if not match:
+                    continue
+                typo = match.group(1)
+                suggestion = difflib.get_close_matches(typo, sorted(_COMMANDS), n=1, cutoff=0.65)
+                if suggestion:
+                    line_number = diagnostic["range"]["start"]["line"]
+                    lines = source.splitlines()
+                    if line_number >= len(lines):
+                        continue
+                    line = lines[line_number]
+                    character_start = line.find(typo)
+                    if character_start < 0:
+                        continue
+                    start_column = _utf16_length(line[:character_start])
+                    start = _position(line_number, start_column)
+                    end = _position(line_number, start_column + _utf16_length(typo))
+                    actions.append({
+                        "title": f"Replace '{typo}' with '{suggestion[0]}'",
+                        "kind": "quickfix",
+                        "diagnostics": [diagnostic],
+                        "edit": {"changes": {uri: [{
+                            "range": {"start": start, "end": end},
+                            "newText": suggestion[0],
+                        }]}},
+                    })
+            result = actions
         else:
             result = None
             if "id" in message and method is not None:

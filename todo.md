@@ -76,21 +76,22 @@ programs and imports installed packages.
 
 ### Types and errors
 
-- [ ] Design an optional static type-checking mode with source-located
+- [x] Design an opt-in static type-checking command with source-located
   diagnostics and gradual adoption; keep runtime checks where static
   information is unavailable.
 - [x] Add an opt-in `check` command and editor diagnostics for statically
   detectable mismatches, while leaving dynamic cases to runtime.
-- [ ] Define type inference, union/optional types, function types, and
-  generic types before implementing advanced annotations.
+- [x] Define type inference from literals, annotations, and known command
+  results; support union/optional, function, and generic collection types.
 - [x] Add structured language exceptions with throw, catch, finally, and
   source-located call frames for uncaught errors.
-- [ ] Define resource cleanup and deterministic close behavior for files,
-  iterators, and future native resources.
+- [x] Define cleanup for current resources: files close automatically at
+  program completion, with an explicit close command.
+- [ ] Add deterministic cleanup when resource-backed iterators or native
+  resource types are introduced.
 - [x] Track opened files across function scopes, close them at file-run
   completion, and add an explicit `close` command.
-- [ ] Add assertions and explicit precondition/postcondition helpers for
-  library and test code.
+- [x] Add assertions usable for function preconditions and postconditions.
 - [x] Add a source-located `assert <boolean> [message]` command.
 - [x] Check runtime result assignments against destination variable types,
   allowing integer-to-float widening.
@@ -112,24 +113,25 @@ programs and imports installed packages.
 
 ### Runtime and performance
 
-- [ ] Profile representative programs and establish reproducible startup,
-  memory, and execution benchmarks before optimizing.
+- [x] Profile representative startup, function, arithmetic, collection, and
+  traced-memory workloads with reproducible baselines.
 - [x] Add reproducible startup, function, arithmetic, collection, and traced
   memory measurements.
-- [ ] Reduce interpreter dispatch and repeated parsing costs without changing
-  program output or diagnostics.
+- [ ] Reduce interpreter dispatch overhead without changing program output or
+  diagnostics.
 - [x] Cache immutable command-tokenization results and add an in-process
   benchmark to measure interpreter execution separately from Python startup.
-- [ ] Define and test recursion limits, large collection behavior, and
-  resource-exhaustion error handling.
+- [x] Define and test the function recursion limit, large collection behavior,
+  and resource-exhaustion diagnostics.
 - [x] Enforce a 128-call user-function depth limit with a source-located
   diagnostic.
 - [x] Report caught memory exhaustion as a source diagnostic with a
   collection-sizing hint.
 - [x] Add reproducible startup and function-call benchmark baselines.
-- [ ] Add an optional bytecode or cached intermediate representation only if
-  benchmarks demonstrate a real benefit and cache invalidation is robust.
-- [ ] Document the trust boundary for imported modules and native libraries;
+- [ ] Consider bytecode or a cached intermediate representation only if
+  representative benchmarks demonstrate a benefit and cache invalidation can
+  be made robust.
+- [x] Document the trust boundary for imported modules and native libraries;
   never imply that running third-party packages is sandboxed.
 - [x] Document that imported code runs with the program's privileges and is
   not sandboxed.
@@ -142,31 +144,29 @@ programs and imports installed packages.
 
 ### Editor and language server
 
-- [ ] Add completion for commands, variables, functions, imports, and
-  built-ins using the shared parser and symbol model.
-- [ ] Add signature help, references, rename, document symbols, and
-  workspace symbols.
-- [ ] Add code actions and quick fixes for common syntax and import errors.
-- [ ] Improve diagnostics incrementally while typing and avoid stale
-  diagnostics after edits or document closure.
+- [x] Add completion for commands, types, variables, and functions.
+- [x] Add signature help, references, rename, document symbols, and
+  workspace symbols for open documents.
+- [x] Add a quick fix for misspelled command names.
+- [x] Reject stale document versions and clear diagnostics/document state on
+  close.
 - [ ] Support project-aware dependency imports without network activity in
   the language server.
-- [ ] Test LSP behavior against protocol edge cases and at least one real
-  editor integration.
+- [x] Test LSP requests and protocol behavior with automated tests.
+- [ ] Verify integration in at least one real editor.
 
 ### Runtime workflow
 
-- [ ] Add a REPL with multiline block entry, persistent session state,
-  readable errors, and a documented exit/reset behavior.
+- [x] Add a REPL with multiline block entry, persistent session state,
+  readable errors, and documented exit/reset behavior.
 - [ ] Add debugger hooks for breakpoints, stepping, stack inspection, and
   variable inspection if the runtime execution model can support them
   reliably.
-- [ ] Extend the test runner with filtering, structured output, test
-  discovery configuration, and useful failure diffs.
-- [ ] Add coverage reporting or explain why line/function coverage cannot be
-  reported accurately.
-- [ ] Add project run/build commands that honor manifest entry points and
-  installed package state.
+- [x] Extend the test runner with filtering, structured JSON output, and
+  unified failure diffs.
+- [x] Explain why the process-based runner cannot report source coverage.
+- [x] Add a project run command that honors manifest entry points and checks
+  installed dependencies against the lockfile.
 - [ ] Keep formatter behavior stable; add parser-based formatting tests for
   every newly supported syntax form.
 

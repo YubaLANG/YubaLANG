@@ -53,6 +53,20 @@ class PackageManagerTests(unittest.TestCase):
             parsed = json.loads((project / "yuba.json").read_text(encoding="utf-8"))
             self.assertEqual(parsed["entry"], "main.yl")
 
+    def test_project_run_uses_manifest_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_package(root, "sample", 'text output "manifest entry"\n')
+            (root / "wrong.yl").write_text('text output "wrong entry"\n', encoding="utf-8")
+            manifest_path = root / "yuba.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["entry"] = "wrong.yl"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            result = run_cli("run", cwd=root)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "wrong entry\n")
+
     def test_add_path_dependency_lock_import_and_check(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

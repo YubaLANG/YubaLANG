@@ -21,6 +21,134 @@ def _read_frames(stream):
 
 
 class LanguageServerTests(unittest.TestCase):
+    def test_initialize_advertises_editor_features(self):
+        server = LanguageServer()
+        response, _ = server.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+        capabilities = response["result"]["capabilities"]
+        for feature in (
+            "completionProvider", "signatureHelpProvider", "referencesProvider",
+            "renameProvider", "documentSymbolProvider", "workspaceSymbolProvider",
+            "codeActionProvider",
+        ):
+            self.assertIn(feature, capabilities)
+
+    def test_completion_includes_commands_and_document_symbols(self):
+        server = LanguageServer()
+        uri = "file:///completion.yl"
+        server.documents[uri] = "define var count: int = 1\nfunc define calculate value\nendfunc\n"
+        response, _ = server.handle({
+            "jsonrpc": "2.0", "id": 1, "method": "textDocument/completion",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 0, "character": 0},
+            },
+        })
+        labels = {item["label"] for item in response["result"]["items"]}
+        self.assertIn("compare", labels)
+        self.assertIn("count", labels)
+        self.assertIn("calculate", labels)
+
+    def test_signature_help_for_user_function(self):
+        server = LanguageServer()
+        uri = "file:///signature.yl"
+        server.documents[uri] = (
+            "func define greet name greeting=hello\nendfunc\n"
+            "func call greet Ada "
+        )
+        response, _ = server.handle({
+            "jsonrpc": "2.0", "id": 1, "method": "textDocument/signatureHelp",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 2, "character": len("func call greet Ada ")},
+            },
+        })
+        self.assertEqual(response["result"]["signatures"][0]["label"], "greet(name, greeting=hello)")
+        self.assertEqual(response["result"]["activeParameter"], 1)
+
+    def test_signature_help_and_parameter_symbols_support_types(self):
+        server = LanguageServer()
+        uri = "file:///typed-signature.yl"
+        server.documents[uri] = (
+            "func define increment value:int -> int\n"
+            "    return value\n"
+            "endfunc\n"
+            "func call increment "
+        )
+        signature, _ = server.handle({
+            "jsonrpc": "2.0", "id": 1, "method": "textDocument/signatureHelp",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 3, "character": len("func call increment ")},
+            },
+        })
+        self.assertEqual(
+            signature["result"]["signatures"][0]["label"],
+            "increment(value:int) -> int",
+        )
+        references, _ = server.handle({
+            "jsonrpc": "2.0", "id": 2, "method": "textDocument/references",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 1, "character": 12},
+                "context": {"includeDeclaration": True},
+            },
+        })
+        self.assertEqual(len(references["result"]), 2)
+
+    def test_references_rename_and_document_symbols(self):
+        server = LanguageServer()
+        uri = "file:///symbols.yl"
+        server.documents[uri] = (
+            "define var count: int = 1\n"
+            "func define read_count\n"
+            "    return count\n"
+            "endfunc\n"
+            "text output count\n"
+        )
+        params = {
+            "textDocument": {"uri": uri},
+            "position": {"line": 0, "character": 13},
+        }
+        references, _ = server.handle({
+            "jsonrpc": "2.0", "id": 1, "method": "textDocument/references",
+            "params": {**params, "context": {"includeDeclaration": True}},
+        })
+        self.assertEqual(len(references["result"]), 3)
+        rename, _ = server.handle({
+            "jsonrpc": "2.0", "id": 2, "method": "textDocument/rename",
+            "params": {**params, "newName": "total"},
+        })
+        self.assertEqual(len(rename["result"]["changes"][uri]), 3)
+        symbols, _ = server.handle({
+            "jsonrpc": "2.0", "id": 3, "method": "textDocument/documentSymbol",
+            "params": {"textDocument": {"uri": uri}},
+        })
+        self.assertEqual({item["name"] for item in symbols["result"]}, {"count", "read_count"})
+
+    def test_workspace_symbols_and_unknown_command_quick_fix(self):
+        server = LanguageServer()
+        uri = "file:///quickfix.yl"
+        source = "func define calculate\nendfunc\ntex output count\n"
+        server.documents[uri] = source
+        workspace, _ = server.handle({
+            "jsonrpc": "2.0", "id": 1, "method": "workspace/symbol",
+            "params": {"query": "calcul"},
+        })
+        self.assertEqual(workspace["result"][0]["name"], "calculate")
+        diagnostic = analyze_document(source)[0]
+        actions, _ = server.handle({
+            "jsonrpc": "2.0", "id": 2, "method": "textDocument/codeAction",
+            "params": {
+                "textDocument": {"uri": uri},
+                "context": {"diagnostics": [diagnostic]},
+            },
+        })
+        self.assertIn("Replace 'tex' with 'text'", actions["result"][0]["title"])
+        edit = actions["result"][0]["edit"]["changes"][uri][0]
+        self.assertEqual(edit["newText"], "text")
+        self.assertEqual(edit["range"]["start"], {"line": 2, "character": 0})
+        self.assertEqual(edit["range"]["end"], {"line": 2, "character": 3})
+
     def test_reports_syntax_diagnostics_with_source_ranges(self):
         diagnostics = analyze_document(
             'define var value: mystery = 1\n'
@@ -209,6 +337,23 @@ class LanguageServerTests(unittest.TestCase):
         })
         self.assertEqual(closed[0]["params"]["diagnostics"], [])
         self.assertNotIn(uri, server.documents)
+
+    def test_stale_document_changes_do_not_replace_newer_text(self):
+        server = LanguageServer()
+        uri = "file:///versioned.yl"
+        server.handle({
+            "jsonrpc": "2.0", "method": "textDocument/didOpen",
+            "params": {"textDocument": {"uri": uri, "version": 4, "text": "text output 4\n"}},
+        })
+        _, stale = server.handle({
+            "jsonrpc": "2.0", "method": "textDocument/didChange",
+            "params": {
+                "textDocument": {"uri": uri, "version": 3},
+                "contentChanges": [{"text": "unknown\n"}],
+            },
+        })
+        self.assertEqual(stale, [])
+        self.assertEqual(server.documents[uri], "text output 4\n")
 
     def test_stdio_protocol_initializes_and_exits(self):
         incoming = io.BytesIO(

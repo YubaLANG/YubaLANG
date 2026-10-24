@@ -1,5 +1,7 @@
 """Discovery and execution of YubaLANG output-based tests."""
 
+import difflib
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -35,10 +37,10 @@ def _first_difference(expected: str, actual: str) -> str:
     return f"line {max(1, len(expected_lines))}: trailing newline differs"
 
 
-def _run_case(program: Path) -> tuple[str, str]:
+def _run_case(program: Path) -> tuple[str, str, str, str]:
     expected_file = program.with_suffix(".expected.txt")
     if not expected_file.is_file():
-        return "ERROR", f"missing expected-output file: {expected_file}"
+        return "ERROR", f"missing expected-output file: {expected_file}", "", ""
 
     try:
         with expected_file.open("r", encoding="utf-8", newline="") as source:
@@ -54,23 +56,27 @@ def _run_case(program: Path) -> tuple[str, str]:
             check=False,
         )
     except (OSError, UnicodeError) as error:
-        return "ERROR", str(error)
+        return "ERROR", str(error), "", ""
     except subprocess.TimeoutExpired:
-        return "ERROR", f"timed out after {TEST_TIMEOUT_SECONDS} seconds"
+        return "ERROR", f"timed out after {TEST_TIMEOUT_SECONDS} seconds", "", ""
 
     if result.returncode != 0:
         detail = _normalize_newlines(result.stdout + result.stderr).strip()
         if not detail:
             detail = f"interpreter exited with status {result.returncode}"
-        return "ERROR", detail
+        return "ERROR", detail, expected, _normalize_newlines(result.stdout)
 
     actual = _normalize_newlines(result.stdout)
     if actual != expected:
-        return "FAIL", _first_difference(expected, actual)
-    return "PASS", ""
+        return "FAIL", _first_difference(expected, actual), expected, actual
+    return "PASS", "", expected, actual
 
 
-def run_tests(path: Path) -> int:
+def run_tests(
+    path: Path,
+    filter_pattern: str | None = None,
+    output_format: str = "text",
+) -> int:
     """Run all .yl tests under a directory, or one .yl test file."""
     path = path.resolve()
 
@@ -82,20 +88,56 @@ def run_tests(path: Path) -> int:
         print(f"test: not a .yl file or directory: {path}", file=sys.stderr)
         return 2
 
+    if filter_pattern:
+        pattern = filter_pattern.casefold()
+        programs = [
+            program for program in programs
+            if pattern in program.stem.casefold()
+            or pattern in str(program.relative_to(path if path.is_dir() else path.parent)).casefold()
+        ]
     if not programs:
-        print(f"test: no .yl tests found in {path}", file=sys.stderr)
+        if output_format == "json":
+            print(json.dumps({
+                "path": str(path), "filter": filter_pattern,
+                "counts": {"PASS": 0, "FAIL": 0, "ERROR": 0}, "tests": [],
+            }, indent=2))
+        else:
+            message = "no .yl tests matched" if filter_pattern else "no .yl tests found"
+            print(f"test: {message} in {path}", file=sys.stderr)
         return 1
 
     counts = {"PASS": 0, "FAIL": 0, "ERROR": 0}
+    cases = []
     for program in programs:
-        status, detail = _run_case(program)
+        status, detail, expected, actual = _run_case(program)
         counts[status] += 1
-        print(f"{status}: {program}")
-        if detail:
-            print(f"  {detail}")
+        cases.append({
+            "name": str(program.relative_to(path if path.is_dir() else path.parent)),
+            "status": status,
+            "detail": detail,
+            "expected": expected,
+            "actual": actual,
+        })
+        if output_format == "text":
+            print(f"{status}: {program}")
+            if detail:
+                print(f"  {detail}")
+            if status == "FAIL":
+                print("\n".join(difflib.unified_diff(
+                    expected.splitlines(), actual.splitlines(),
+                    fromfile="expected", tofile="actual", lineterm="",
+                )))
 
-    print(
-        f"Results: {counts['PASS']} passed, {counts['FAIL']} failed, "
-        f"{counts['ERROR']} errored"
-    )
+    if output_format == "json":
+        print(json.dumps({
+            "path": str(path),
+            "filter": filter_pattern,
+            "counts": counts,
+            "tests": cases,
+        }, indent=2))
+    else:
+        print(
+            f"Results: {counts['PASS']} passed, {counts['FAIL']} failed, "
+            f"{counts['ERROR']} errored"
+        )
     return 1 if counts["FAIL"] or counts["ERROR"] else 0

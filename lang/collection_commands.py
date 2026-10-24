@@ -1,5 +1,6 @@
 from .runtime import Runtime
 from .string_builtins import resolve
+from .type_system import parse_type
 
 
 def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
@@ -8,12 +9,15 @@ def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
         raise SyntaxError(f"Usage: {collection_type} <operation> <variable> [arguments]")
     action, name = parts[1], parts[2]
     variable = runtime.require_var(name)
-    if variable["type"] != collection_type:
+    if parse_type(variable["type"]).name != collection_type:
         raise TypeError(f"Variable '{name}' is not of type '{collection_type}'.")
     collection = variable["value"]
 
     if collection_type == "list" and action == "append" and len(parts) == 4:
-        collection.append(resolve(parts[3], runtime))
+        value = resolve(parts[3], runtime)
+        candidate = [*collection, value]
+        runtime.validate_container_mutation(collection, candidate)
+        collection.append(value)
         return
     if collection_type == "list" and action == "get" and len(parts) == 5:
         index, destination = int(parts[3]), parts[4]
@@ -23,7 +27,10 @@ def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
         runtime.assign_var(parts[3], len(collection))
         return
     if collection_type == "dict" and action == "set" and len(parts) == 5:
-        collection[resolve(parts[3], runtime)] = resolve(parts[4], runtime)
+        key, value = resolve(parts[3], runtime), resolve(parts[4], runtime)
+        candidate = {**collection, key: value}
+        runtime.validate_container_mutation(collection, candidate)
+        collection[key] = value
         return
     if collection_type == "dict" and action == "get" and len(parts) == 5:
         key, destination = resolve(parts[3], runtime), parts[4]
@@ -32,6 +39,7 @@ def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
     if collection_type == "set" and action in ("add", "remove") and len(parts) == 4:
         value = resolve(parts[3], runtime)
         if action == "add":
+            runtime.validate_container_mutation(collection, collection | {value})
             collection.add(value)
         else:
             collection.remove(value)

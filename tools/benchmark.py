@@ -113,6 +113,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
             path = folder / f"{name}.yl"
             path.write_text(source, encoding="utf-8")
             paths[name] = path
+        paths["example_functions"] = ROOT / "examples" / "functions.yl"
+        paths["example_collections"] = ROOT / "examples" / "collections.yl"
         samples = {name: _measure(path, options.runs) for name, path in paths.items()}
         execution_samples = {
             name: _measure_execution(path, options.runs)

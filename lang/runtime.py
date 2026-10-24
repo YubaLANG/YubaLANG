@@ -3,6 +3,8 @@ from io import IOBase
 from pathlib import Path
 from typing import Any
 
+from .type_system import FunctionReference, TypeSpec, format_type, is_known_type, parse_type
+
 
 TYPES = {
     "int": int,
@@ -17,6 +19,7 @@ TYPES = {
     "bytearray": bytearray,
     "iterator": object,
     "file": object,
+    "none": type(None),
 }
 
 MAX_FUNCTION_CALL_DEPTH = 128
@@ -48,6 +51,8 @@ class UserFunction:
     namespace: str = ""
     defaults: dict[str, Any] = field(default_factory=dict)
     variadic_parameter: str | None = None
+    parameter_types: dict[str, str] = field(default_factory=dict)
+    return_type: str | None = None
 
 
 @dataclass
@@ -135,7 +140,7 @@ class Runtime:
         if var_type == "float" and matches:
             value = float(value)
         if not matches:
-            actual_type = type(value).__name__
+            actual_type = self.type_name(value)
             raise TypeError(
                 f"Cannot assign a {actual_type} value to variable '{name}' "
                 f"of type '{var_type}'."
@@ -143,17 +148,147 @@ class Runtime:
         self.update_var(name, var_type, value)
 
     def value_matches_type(self, var_type: str, value: Any) -> bool:
-        if var_type in self.records:
-            return isinstance(value, RecordValue) and value.record_type == var_type
-        if var_type == "iterator":
+        return self._matches_type(parse_type(var_type), value, allow_widening=True)
+
+    def _matches_type(
+        self, spec: TypeSpec, value: Any, allow_widening: bool
+    ) -> bool:
+        if spec.name == "union":
+            return any(
+                self._matches_type(option, value, allow_widening)
+                for option in spec.arguments
+            )
+        if spec.name == "function":
+            if not isinstance(value, FunctionReference):
+                return False
+            function = self.functions.get(value.name)
+            if function is None or function.return_type is None:
+                return False
+            if function.variadic_parameter is not None:
+                return False
+            if len(function.parameters) != len(spec.arguments) - 1:
+                return False
+            actual_parameters = []
+            for parameter in function.parameters:
+                parameter_type = function.parameter_types.get(parameter)
+                if parameter_type is None:
+                    return False
+                actual_parameters.append(parse_type(parameter_type))
+            return TypeSpec(
+                "function",
+                (*actual_parameters, parse_type(function.return_type)),
+            ) == spec
+        if spec.name in self.records:
+            return isinstance(value, RecordValue) and value.record_type == spec.name
+        if spec.name == "iterator":
             return hasattr(value, "__next__")
-        if var_type == "file":
+        if spec.name == "file":
             return isinstance(value, IOBase)
-        if var_type == "int":
+        if spec.name == "int":
             return isinstance(value, int) and not isinstance(value, bool)
-        if var_type == "float":
-            return isinstance(value, (int, float)) and not isinstance(value, bool)
-        return var_type in TYPES and isinstance(value, TYPES[var_type])
+        if spec.name == "float":
+            return isinstance(value, float) or (
+                allow_widening and isinstance(value, int) and not isinstance(value, bool)
+            )
+        if spec.name in ("list", "tuple", "set", "dict"):
+            if not isinstance(value, TYPES[spec.name]):
+                return False
+            if not spec.arguments:
+                return True
+            if spec.name == "dict":
+                key_type, value_type = spec.arguments
+                return all(
+                    self._matches_type(key_type, key, allow_widening=False)
+                    and self._matches_type(value_type, item, allow_widening=False)
+                    for key, item in value.items()
+                )
+            if spec.name == "tuple" and len(spec.arguments) > 1:
+                return len(value) == len(spec.arguments) and all(
+                    self._matches_type(item_type, item, allow_widening=False)
+                    for item_type, item in zip(spec.arguments, value)
+                )
+            item_type = spec.arguments[0]
+            return all(
+                self._matches_type(item_type, item, allow_widening=False)
+                for item in value
+            )
+        return (
+            spec.name in TYPES and not spec.arguments
+            and isinstance(value, TYPES[spec.name])
+        )
+
+    def type_is_known(self, type_name: str) -> bool:
+        return is_known_type(parse_type(type_name), set(self.records))
+
+    @staticmethod
+    def type_name(value: Any) -> str:
+        if isinstance(value, FunctionReference):
+            return "function"
+        if isinstance(value, RecordValue):
+            return value.record_type
+        if value is None:
+            return "none"
+        if isinstance(value, bool):
+            return "bool"
+        for name, python_type in TYPES.items():
+            if name not in ("iterator", "file", "none") and isinstance(value, python_type):
+                return name
+        if hasattr(value, "__next__"):
+            return "iterator"
+        return type(value).__name__
+
+    def validate_container_mutation(self, container: Any, candidate: Any) -> None:
+        visited: set[tuple[int, TypeSpec]] = set()
+
+        def check(value: Any, spec: TypeSpec) -> bool:
+            pair = (id(value), spec)
+            if pair in visited:
+                return True
+            visited.add(pair)
+            if value is container:
+                return self.value_matches_type(format_type(spec), candidate)
+            if spec.name == "union":
+                return all(
+                    check(value, option)
+                    for option in spec.arguments
+                    if self.value_matches_type(format_type(option), value)
+                )
+            if spec.name == "list" and spec.arguments and isinstance(value, list):
+                return all(check(item, spec.arguments[0]) for item in value)
+            if spec.name == "set" and spec.arguments and isinstance(value, set):
+                return all(check(item, spec.arguments[0]) for item in value)
+            if spec.name == "tuple" and spec.arguments and isinstance(value, tuple):
+                if len(spec.arguments) == 1:
+                    return all(check(item, spec.arguments[0]) for item in value)
+                return all(
+                    check(item, item_spec)
+                    for item, item_spec in zip(value, spec.arguments)
+                )
+            if spec.name == "dict" and len(spec.arguments) == 2 and isinstance(value, dict):
+                return all(
+                    check(key, spec.arguments[0]) and check(item, spec.arguments[1])
+                    for key, item in value.items()
+                )
+            if (
+                spec.name in self.records and isinstance(value, RecordValue)
+                and value.record_type == spec.name
+            ):
+                return all(
+                    check(value.fields[field_name], parse_type(field_type))
+                    for field_name, field_type in self.records[spec.name].fields.items()
+                )
+            return True
+
+        for scope in self.scopes:
+            for variable in scope.values():
+                try:
+                    spec = parse_type(variable["type"])
+                except ValueError:
+                    continue
+                if not check(variable["value"], spec):
+                    raise TypeError(
+                        f"Mutation would violate collection type '{format_type(spec)}'."
+                    )
 
     def require_var(self, name: str) -> dict[str, Any]:
         result = self.get_var(name)

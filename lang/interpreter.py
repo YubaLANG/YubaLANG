@@ -24,6 +24,7 @@ from .runtime import (
     UserFunction,
 )
 from .string_builtins import resolve
+from .type_system import FunctionReference, format_type, parse_type
 
 
 class ReturnException(Exception):
@@ -69,16 +70,7 @@ def _split(line: str) -> list[str]:
 
 
 def _type_of(value: Any) -> str:
-    if isinstance(value, RecordValue):
-        return value.record_type
-    if isinstance(value, bool):
-        return "bool"
-    for name in ("int", "float", "string", "list", "dict", "set", "tuple", "bytes", "bytearray"):
-        if isinstance(value, TYPES[name]):
-            return name
-    if hasattr(value, "__next__"):
-        return "iterator"
-    return "string"
+    return Runtime.type_name(value)
 
 
 def interpret(
@@ -144,13 +136,43 @@ def _invoke_function(
         parameter: value for parameter, value in function.defaults.items()
         if parameter not in bound_arguments
     })
+    for parameter, expected_type in function.parameter_types.items():
+        if parameter in bound_arguments and not runtime.value_matches_type(
+            expected_type, bound_arguments[parameter]
+        ):
+            actual_type = _type_of(bound_arguments[parameter])
+            raise TypeError(
+                f"Function '{name}' parameter '{parameter}' requires "
+                f"type '{expected_type}', got '{actual_type}'."
+            )
+        if (
+            parameter in bound_arguments
+            and expected_type == "float"
+            and isinstance(bound_arguments[parameter], int)
+            and not isinstance(bound_arguments[parameter], bool)
+        ):
+            bound_arguments[parameter] = float(bound_arguments[parameter])
     local_scope = {
-        parameter: {"type": _type_of(bound_arguments[parameter]), "value": bound_arguments[parameter]}
+        parameter: {
+            "type": function.parameter_types.get(
+                parameter, _type_of(bound_arguments[parameter])
+            ),
+            "value": bound_arguments[parameter],
+        }
         for parameter in function.parameters
     }
     if function.variadic_parameter is not None:
+        variadic_type = function.parameter_types.get(function.variadic_parameter)
+        if variadic_type is not None:
+            for value in extra_arguments:
+                if not runtime.value_matches_type(variadic_type, value):
+                    raise TypeError(
+                        f"Function '{name}' variadic parameter "
+                        f"'{function.variadic_parameter}' requires type "
+                        f"'{variadic_type}'."
+                    )
         local_scope[function.variadic_parameter] = {
-            "type": "tuple",
+            "type": f"tuple[{variadic_type}]" if variadic_type else "tuple",
             "value": tuple(extra_arguments),
         }
     runtime.scopes.append(local_scope)
@@ -167,12 +189,32 @@ def _invoke_function(
             function.namespace or None,
         )
     except ReturnException as result:
+        if function.return_type is not None and not runtime.value_matches_type(
+            function.return_type, result.value
+        ):
+            actual_type = _type_of(result.value)
+            raise TypeError(
+                f"Function '{name}' must return '{function.return_type}', "
+                f"got '{actual_type}'."
+            )
+        if (
+            function.return_type == "float"
+            and isinstance(result.value, int)
+            and not isinstance(result.value, bool)
+        ):
+            result.value = float(result.value)
         return result.value if result.has_value else None
     finally:
         runtime.call_stack.pop()
         runtime.function_call_depth -= 1
         runtime.current_namespaces.pop()
         runtime.scopes.pop()
+    if function.return_type is not None and not runtime.value_matches_type(
+        function.return_type, None
+    ):
+        raise TypeError(
+            f"Function '{name}' must return '{function.return_type}', got 'none'."
+        )
     return None
 
 
@@ -180,6 +222,10 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
     if len(parts) < 3:
         raise SyntaxError("Usage: func call <name> [arguments] [-> destination]")
     name = parts[2]
+    if runtime.resolve_function(name) is None:
+        variable = runtime.get_var(name)
+        if variable is not None and isinstance(variable["value"], FunctionReference):
+            name = variable["value"].name
     if runtime.resolve_function(name) is None:
         raise ValueError(f"Function '{name}' is not defined.")
     call_parts = parts[3:]
@@ -496,11 +542,24 @@ def execute_lines(
                 parameters = []
                 defaults = {}
                 variadic_parameter = None
+                parameter_types = {}
                 optional_seen = False
                 declarations = parts[3:]
+                return_type = None
+                if "->" in declarations:
+                    return_index = declarations.index("->")
+                    if return_index == len(declarations) - 1:
+                        raise SyntaxError("A function return type must follow '->'.")
+                    return_type = format_type(
+                        parse_type(" ".join(declarations[return_index + 1:]))
+                    )
+                    if not runtime.type_is_known(return_type):
+                        raise ValueError(f"Unknown type: {return_type}")
+                    declarations = declarations[:return_index]
                 for declaration_index, declaration in enumerate(declarations):
                     if declaration.startswith("*"):
-                        parameter = declaration[1:]
+                        parameter_declaration = declaration[1:]
+                        parameter, type_separator, parameter_type = parameter_declaration.partition(":")
                         if (
                             not parameter.isidentifier()
                             or declaration_index != len(declarations) - 1
@@ -510,15 +569,36 @@ def execute_lines(
                                 "A variadic parameter must be a final '*name' parameter."
                             )
                         variadic_parameter = parameter
+                        if type_separator:
+                            parameter_type = format_type(parse_type(parameter_type))
+                            if not runtime.type_is_known(parameter_type):
+                                raise ValueError(f"Unknown type: {parameter_type}")
+                            parameter_types[parameter] = parameter_type
                         continue
                     parameter, separator, default_value = declaration.partition("=")
+                    parameter, type_separator, parameter_type = parameter.partition(":")
                     if not parameter.isidentifier() or (separator and not default_value):
                         raise SyntaxError(
-                            "Function parameters must be identifiers or name=value defaults."
+                            "Function parameters must be name[:type] or name[:type]=value."
                         )
+                    if type_separator:
+                        parameter_type = format_type(parse_type(parameter_type))
+                        if not runtime.type_is_known(parameter_type):
+                            raise ValueError(f"Unknown type: {parameter_type}")
+                        parameter_types[parameter] = parameter_type
                     if separator:
                         optional_seen = True
-                        defaults[parameter] = resolve(default_value, runtime)
+                        defaults[parameter] = (
+                            parse_value(default_value, parameter_type, runtime)
+                            if type_separator else resolve(default_value, runtime)
+                        )
+                        if type_separator and not runtime.value_matches_type(
+                            parameter_type, defaults[parameter]
+                        ):
+                            raise TypeError(
+                                f"Default for parameter '{parameter}' must match "
+                                f"type '{parameter_type}'."
+                            )
                     elif optional_seen:
                         raise SyntaxError(
                             "Required function parameters must precede default parameters."
@@ -544,6 +624,7 @@ def execute_lines(
                 runtime.functions[qualified_name] = UserFunction(
                     parameters, body, source_name, body_line_numbers,
                     namespace or "", defaults, variadic_parameter,
+                    parameter_types, return_type,
                 )
 
             elif command == "func" and len(parts) >= 3 and parts[1] == "call":

@@ -5,6 +5,7 @@ import re
 import shlex
 
 from .runtime import TYPES
+from .type_system import TypeSpec, format_type, is_known_type, parse_type
 
 
 _FUNCTION = re.compile(r"^func define ")
@@ -13,47 +14,146 @@ _IDENTIFIER = re.compile(r"^[A-Za-z_]\w*$")
 
 def _literal_type(value: str) -> str | None:
     value = value.strip()
-    if value.lower() in ("true", "false"):
-        return "bool"
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-        try:
-            return "string" if isinstance(ast.literal_eval(value), str) else None
-        except (SyntaxError, ValueError):
-            return None
     try:
-        parsed = ast.literal_eval(value)
+        parsed = ast.literal_eval(_normalize_literals(value))
     except (SyntaxError, ValueError):
         return None
-    if isinstance(parsed, bool):
+    return _python_type(parsed)
+
+
+def _normalize_literals(value: str) -> str:
+    result = []
+    quote = None
+    escaped = False
+    index = 0
+    replacements = {"true": "True", "false": "False", "none": "None"}
+    while index < len(value):
+        char = value[index]
+        if quote is not None:
+            result.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in ("'", '"'):
+            quote = char
+            result.append(char)
+            index += 1
+            continue
+        match = re.match(r"[A-Za-z_]\w*", value[index:])
+        if match:
+            token = match.group()
+            before = value[index - 1] if index else ""
+            after_index = index + len(token)
+            after = value[after_index] if after_index < len(value) else ""
+            if token.lower() in replacements and not (
+                before.isalnum() or before == "_" or after.isalnum() or after == "_"
+            ):
+                token = replacements[token.lower()]
+            result.append(token)
+            index = after_index
+        else:
+            result.append(char)
+            index += 1
+    return "".join(result)
+
+
+def _merge_types(types: list[str]) -> str | None:
+    if not types:
+        return None
+    options = []
+    for type_name in types:
+        spec = parse_type(type_name)
+        options.extend(spec.arguments if spec.name == "union" else (spec,))
+    return format_type(TypeSpec("union", tuple(dict.fromkeys(options))))
+
+
+def _python_type(value: object) -> str | None:
+    if value is None:
+        return "none"
+    if isinstance(value, bool):
         return "bool"
-    if isinstance(parsed, int):
+    if isinstance(value, int):
         return "int"
-    if isinstance(parsed, float):
+    if isinstance(value, float):
         return "float"
-    if isinstance(parsed, list):
-        return "list"
-    if isinstance(parsed, dict):
-        return "dict"
-    if isinstance(parsed, set):
-        return "set"
-    if isinstance(parsed, tuple):
-        return "tuple"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        item_types = [_python_type(item) for item in value]
+        item_type = _merge_types([item for item in item_types if item])
+        return f"list[{item_type}]" if item_type else "list"
+    if isinstance(value, set):
+        item_types = [_python_type(item) for item in value]
+        item_type = _merge_types([item for item in item_types if item])
+        return f"set[{item_type}]" if item_type else "set"
+    if isinstance(value, dict):
+        key_types = [_python_type(item) for item in value]
+        item_types = [_python_type(item) for item in value.values()]
+        key_type = _merge_types([item for item in key_types if item])
+        value_type = _merge_types([item for item in item_types if item])
+        return f"dict[{key_type}, {value_type}]" if key_type and value_type else "dict"
+    if isinstance(value, tuple):
+        item_types = [_python_type(item) for item in value]
+        return (
+            f"tuple[{', '.join(item_types)}]"
+            if item_types and all(item_types)
+            else "tuple"
+        )
     return None
 
 
-def _type_of(value: str, variables: dict[str, str | None]) -> str | None:
+def _type_of(
+    value: str,
+    variables: dict[str, str | None],
+    functions: dict[str, str | None] | None = None,
+) -> str | None:
     value = value.strip()
     if value in variables:
         return variables[value]
+    if functions and value in functions:
+        return functions[value]
     return _literal_type(value)
 
 
 def _compatible(actual: str | None, expected: str) -> bool:
-    return actual is None or actual == expected or (actual == "int" and expected == "float")
+    if actual is None:
+        return True
+    actual_spec, expected_spec = parse_type(actual), parse_type(expected)
+    if expected_spec.name == "union":
+        return any(_compatible(actual, format_type(option)) for option in expected_spec.arguments)
+    if actual_spec.name == "union":
+        return all(
+            _compatible(format_type(option), expected)
+            for option in actual_spec.arguments
+        )
+    if actual_spec.name == "int" and expected_spec.name == "float":
+        return True
+    if actual_spec.name != expected_spec.name:
+        return False
+    if not expected_spec.arguments:
+        return True
+    if not actual_spec.arguments:
+        return True
+    if len(actual_spec.arguments) != len(expected_spec.arguments):
+        return False
+    return all(
+        _compatible(format_type(actual_item), format_type(expected_item))
+        and _compatible(format_type(expected_item), format_type(actual_item))
+        for actual_item, expected_item in zip(
+            actual_spec.arguments, expected_spec.arguments
+        )
+    )
 
 
 def _result_type(
-    parts: list[str], variables: dict[str, str | None]
+    parts: list[str],
+    variables: dict[str, str | None],
+    functions: dict[str, str | None],
 ) -> tuple[str, str | None] | None:
     command = parts[0]
     fixed = {
@@ -98,6 +198,11 @@ def _result_type(
         if parts[4] in result_types:
             return parts[parts.index("->") + 1], result_types[parts[4]]
     if command == "func" and len(parts) >= 5 and parts[1] == "call" and "->" in parts:
+        function_type = _type_of(parts[2], variables, functions)
+        if function_type is not None:
+            spec = parse_type(function_type)
+            if spec.name == "function":
+                return parts[parts.index("->") + 1], format_type(spec.arguments[-1])
         return parts[parts.index("->") + 1], None
     return None
 
@@ -108,6 +213,9 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
     globals_: dict[str, str | None] = {}
     scopes = [globals_]
     record_types: dict[str, dict[str, str]] = {}
+    function_types: dict[str, str | None] = {}
+    function_parameters: dict[str, list[tuple[str, str | None]]] = {}
+    function_returns: list[str | None] = []
     function_depth = 0
 
     for line_number, line in enumerate(lines):
@@ -123,12 +231,67 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
         if _FUNCTION.match(stripped):
             function_depth += 1
             scopes.append(dict(globals_))
-            for parameter in parts[3:]:
-                scopes[-1][parameter] = None
+            declarations = parts[3:]
+            return_type = None
+            if "->" in declarations:
+                return_index = declarations.index("->")
+                return_type = " ".join(declarations[return_index + 1:])
+                declarations = declarations[:return_index]
+            normalized_return_type = None
+            if return_type:
+                try:
+                    return_spec = parse_type(return_type)
+                    if is_known_type(return_spec, set(record_types)):
+                        normalized_return_type = format_type(return_spec)
+                except ValueError:
+                    pass
+            function_returns.append(normalized_return_type)
+            parameter_types = []
+            named_parameter_types = []
+            for declaration in declarations:
+                parameter = declaration.lstrip("*").partition("=")[0]
+                name, separator, annotation = parameter.partition(":")
+                if separator:
+                    try:
+                        spec = parse_type(annotation)
+                        scopes[-1][name] = (
+                            format_type(spec)
+                            if is_known_type(spec, set(record_types))
+                            else None
+                        )
+                        parameter_types.append(format_type(spec))
+                        named_parameter_types.append((name, format_type(spec)))
+                    except ValueError:
+                        scopes[-1][name] = None
+                        parameter_types.append(None)
+                        named_parameter_types.append((name, None))
+                else:
+                    scopes[-1][name] = None
+                    parameter_types.append(None)
+                    named_parameter_types.append((name, None))
+            function_parameters[parts[2]] = named_parameter_types
+            if (
+                return_type
+                and all(parameter_types)
+                and all(not declaration.startswith("*") for declaration in declarations)
+            ):
+                try:
+                    function_spec = parse_type(
+                        f"({', '.join(parameter_types)}) -> {normalized_return_type}"
+                    )
+                    if is_known_type(function_spec, set(record_types)):
+                        function_types[parts[2]] = format_type(function_spec)
+                    else:
+                        function_types[parts[2]] = None
+                except ValueError:
+                    function_types[parts[2]] = None
+            else:
+                function_types[parts[2]] = None
             continue
         if parts[0] == "endfunc" and function_depth:
             scopes.pop()
             function_depth -= 1
+            function_returns.pop()
             continue
         variables = scopes[-1]
         if parts[0] == "record" and len(parts) >= 3 and parts[1] == "define":
@@ -136,7 +299,12 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
             for declaration in parts[3:]:
                 if declaration.count(":") == 1:
                     field_name, field_type = declaration.split(":", 1)
-                    fields[field_name] = field_type
+                    try:
+                        spec = parse_type(field_type)
+                    except ValueError:
+                        continue
+                    if is_known_type(spec, set(record_types)):
+                        fields[field_name] = format_type(spec)
             record_types[parts[2]] = fields
             continue
         if parts[0] == "record" and len(parts) >= 4 and parts[1] == "create":
@@ -151,7 +319,7 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                         f"but got {len(values)}.",
                     ))
                 for (field_name, expected), token in zip(fields.items(), values):
-                    actual = _type_of(token, variables)
+                    actual = _type_of(token, variables, function_types)
                     if actual is not None and not _compatible(actual, expected):
                         diagnostics.append((
                             line_number,
@@ -162,12 +330,21 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
             continue
         if (
             parts[0] == "define" and len(parts) >= 6 and parts[1] == "var"
-            and parts[2].endswith(":") and parts[4] == "="
+            and parts[2].endswith(":") and "=" in parts
         ):
-            name, declared = parts[2][:-1], parts[3]
-            if declared not in TYPES and declared not in record_types:
+            equal_index = parts.index("=")
+            name = parts[2][:-1]
+            declared = " ".join(parts[3:equal_index])
+            try:
+                declared_spec = parse_type(declared)
+            except ValueError:
                 continue
-            actual = _type_of(" ".join(parts[5:]), variables)
+            if not is_known_type(declared_spec, set(record_types)):
+                continue
+            declared = format_type(declared_spec)
+            actual = _type_of(
+                " ".join(parts[equal_index + 1:]), variables, function_types
+            )
             if actual is not None and not _compatible(actual, declared):
                 diagnostics.append((
                     line_number,
@@ -185,7 +362,7 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
             continue
         if parts[0] == "assert":
             if len(parts) >= 2:
-                condition_type = _type_of(parts[1], variables)
+                condition_type = _type_of(parts[1], variables, function_types)
                 if condition_type is not None and condition_type != "bool":
                     diagnostics.append((
                         line_number,
@@ -193,7 +370,7 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                         "expected 'bool'.",
                     ))
             if len(parts) == 3:
-                message_type = _type_of(parts[2], variables)
+                message_type = _type_of(parts[2], variables, function_types)
                 if message_type is not None and message_type != "string":
                     diagnostics.append((
                         line_number,
@@ -201,8 +378,63 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                         "expected 'string'.",
                     ))
             continue
+        if parts[0] == "return" and function_returns:
+            expected = function_returns[-1]
+            actual = _type_of(
+                " ".join(parts[1:]) if len(parts) > 1 else "none",
+                variables,
+                function_types,
+            )
+            if (
+                expected is not None and actual is not None
+                and not _compatible(actual, expected)
+            ):
+                diagnostics.append((
+                    line_number,
+                    f"Type mismatch: function return has type '{actual}' "
+                    f"but annotation requires '{expected}'.",
+                ))
+            continue
+        if len(parts) >= 3 and parts[:2] == ["func", "call"]:
+            function_type = _type_of(parts[2], variables, function_types)
+            if function_type is not None:
+                spec = parse_type(function_type)
+                if spec.name == "function":
+                    call_arguments = parts[3:]
+                    if "->" in call_arguments:
+                        call_arguments = call_arguments[:call_arguments.index("->")]
+                    named_parameters = function_parameters.get(parts[2], [])
+                    for argument_index, argument in enumerate(call_arguments):
+                        parameter_name, separator, value = argument.partition("=")
+                        if separator and parameter_name.isidentifier():
+                            matching = next(
+                                (
+                                    parameter_type for name, parameter_type in named_parameters
+                                    if name == parameter_name
+                                ),
+                                None,
+                            )
+                            if matching is None:
+                                continue
+                            expected_argument = matching
+                        else:
+                            if argument_index >= len(spec.arguments) - 1:
+                                continue
+                            expected_argument = format_type(spec.arguments[argument_index])
+                            value = argument
+                        actual_argument = _type_of(value, variables, function_types)
+                        if (
+                            actual_argument is not None
+                            and not _compatible(actual_argument, expected_argument)
+                        ):
+                            diagnostics.append((
+                                line_number,
+                                f"Type mismatch: argument '{value}' has type "
+                                f"'{actual_argument}' but parameter requires "
+                                f"'{expected_argument}'.",
+                            ))
 
-        result = _result_type(parts, variables)
+        result = _result_type(parts, variables, function_types)
         if result is None:
             continue
         destination, actual = result

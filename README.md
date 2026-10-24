@@ -3,6 +3,7 @@ A fast programming language with a hierarchical syntax built for modern programm
 
 ## Documentation
 
+* [Master feature reference](docs/master-reference.md)
 * [YubaLANG 1.2 language reference](docs/1.2-docs.md)
 * [Built-in function reference](docs/builtins.md)
 * [Language server and editor setup](docs/language-server.md)
@@ -17,6 +18,9 @@ Run `py -3 YubaLANG.py check <file.yl>` for non-executing syntax and
 statically-detectable type diagnostics.
 The [language reference](docs/1.2-docs.md#records) describes user-defined
 records.
+
+For projects, run `py -3 YubaLANG.py run .`; for an interactive session, run
+`py -3 YubaLANG.py repl`.
 
 ## License
 

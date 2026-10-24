@@ -8,6 +8,7 @@ from .ffi import execute_ffi
 from .io_commands import execute_io_command
 from .runtime import RecordDefinition, RecordValue, Runtime, TYPES
 from .string_builtins import resolve
+from .type_system import FunctionReference, format_type, parse_type
 
 
 def _assign(runtime: Runtime, name: str, value: Any) -> None:
@@ -21,6 +22,8 @@ def _comparison_value(value: str, runtime: Runtime) -> Any:
         return value[1:-1]
     if value.lower() in ("true", "false"):
         return value.lower() == "true"
+    if value.lower() == "none":
+        return None
     try:
         return float(value) if "." in value else int(value)
     except ValueError:
@@ -74,19 +77,24 @@ def execute_command(
         return
 
     if command == "define":
-        if len(parts) < 6 or parts[1] != "var" or not parts[2].endswith(":") or parts[4] != "=":
+        if (
+            len(parts) < 6 or parts[1] != "var" or not parts[2].endswith(":")
+            or "=" not in parts
+        ):
             raise SyntaxError("Usage: define var <name>: <type> = <value>")
-        name, value_type = parts[2][:-1], parts[3]
-        if value_type not in TYPES and value_type not in runtime.records:
+        equal_index = parts.index("=")
+        name = parts[2][:-1]
+        value_type = format_type(parse_type(" ".join(parts[3:equal_index])))
+        if not runtime.type_is_known(value_type):
             raise ValueError(f"Unknown type: {value_type}")
         if value_type in runtime.records:
-            source = " ".join(parts[5:])
+            source = " ".join(parts[equal_index + 1:])
             variable = runtime.get_var(source)
             if variable is None or variable["type"] != value_type:
                 raise TypeError(f"Expected a '{value_type}' record variable.")
             value = variable["value"]
         else:
-            value = parse_value(" ".join(parts[5:]), value_type, runtime)
+            value = parse_value(" ".join(parts[equal_index + 1:]), value_type, runtime)
         runtime.define_var(name, value_type, value)
         return
 
@@ -111,9 +119,9 @@ def execute_command(
             field_name, field_type = declaration.split(":", 1)
             if not field_name.isidentifier() or field_name in fields:
                 raise ValueError(f"Invalid or duplicate record field '{field_name}'.")
-            if field_type not in TYPES and field_type not in runtime.records:
+            if not runtime.type_is_known(field_type):
                 raise ValueError(f"Unknown type: {field_type}")
-            fields[field_name] = field_type
+            fields[field_name] = format_type(parse_type(field_type))
         runtime.records[name] = RecordDefinition(fields)
         return
 
@@ -258,6 +266,12 @@ def execute_command(
         if len(parts) != 4:
             raise SyntaxError(f"Usage: {command} <function> <iterable> <dest_list>")
         function_name, iterable, destination = parts[1], resolve(parts[2], runtime), parts[3]
+        callback_variable = runtime.get_var(function_name)
+        if (
+            callback_variable is not None
+            and isinstance(callback_variable["value"], FunctionReference)
+        ):
+            function_name = callback_variable["value"].name
 
         def callback(value: Any) -> Any:
             if runtime.resolve_function(function_name) is not None:
@@ -444,10 +458,14 @@ def _execute_utility_command(parts: list[str], runtime: Runtime) -> None:
     if command == "bool" and len(parts) == 3:
         _assign(runtime, parts[2], bool(resolve(parts[1], runtime)))
     elif command == "callable" and len(parts) == 3:
+        variable = runtime.get_var(parts[1])
         result = runtime.resolve_function(parts[1]) is not None or parts[1] in {
             "abs", "ascii", "bool", "chr", "float", "int", "len", "ord",
             "repr", "round", "str",
         }
+        result = result or (
+            variable is not None and isinstance(variable["value"], FunctionReference)
+        )
         _assign(runtime, parts[2], result)
     elif command == "id" and len(parts) == 3:
         _assign(runtime, parts[2], id(runtime.require_var(parts[1])["value"]))

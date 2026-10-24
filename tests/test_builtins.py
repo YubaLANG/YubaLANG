@@ -96,7 +96,7 @@ class BuiltinCommandTests(unittest.TestCase):
                 """
                 define var values: list = []
                 define var count: int = 0
-                range 10000 values
+                range 100000 values
                 len values count
                 arith sum values
                 arith round 2.5
@@ -106,12 +106,12 @@ class BuiltinCommandTests(unittest.TestCase):
                 arith mod -7 3
                 """
             )
-        self.assertEqual(runtime.require_var("count")["value"], 10000)
+        self.assertEqual(runtime.require_var("count")["value"], 100000)
         self.assertEqual(runtime.require_var("values")["value"][0], 0)
-        self.assertEqual(runtime.require_var("values")["value"][-1], 9999)
+        self.assertEqual(runtime.require_var("values")["value"][-1], 99999)
         self.assertEqual(
             output.getvalue().splitlines(),
-            ["49995000", "2", "4", "[-3, 2]", "0.125", "2"],
+            ["4999950000", "2", "4", "[-3, 2]", "0.125", "2"],
         )
 
     def test_command_error_includes_source_line(self) -> None:
@@ -148,6 +148,36 @@ class BuiltinCommandTests(unittest.TestCase):
             self.run_program("assert 1")
         self.assertIn("Assertion condition must be a boolean.", output.getvalue())
 
+    def test_assertion_can_enforce_a_function_precondition(self) -> None:
+        runtime = self.run_program(
+            """
+            func define require_positive value
+                define var valid: bool = false
+                compare value > 0 valid
+                assert valid "value must be positive"
+                return value
+            endfunc
+            define var result: int = 0
+            func call require_positive 5 -> result
+            """
+        )
+        self.assertEqual(runtime.require_var("result")["value"], 5)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            self.run_program(
+                """
+                func define require_positive value
+                    define var valid: bool = false
+                    compare value > 0 valid
+                    assert valid "value must be positive"
+                endfunc
+                func call require_positive -1
+                """
+            )
+        self.assertIn("Assertion failed: value must be positive", output.getvalue())
+        self.assertIn("at require_positive", output.getvalue())
+
     def test_result_destinations_enforce_declared_types(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
@@ -162,6 +192,103 @@ class BuiltinCommandTests(unittest.TestCase):
             "Cannot assign a int value to variable 'text' of type 'string'.",
             output.getvalue(),
         )
+
+    def test_none_union_and_optional_annotations(self) -> None:
+        runtime = self.run_program(
+            """
+            define var optional_count: int? = none
+            define var mixed: int | string = "ready"
+            define var is_none: bool = false
+            compare optional_count == none is_none
+            """
+        )
+        self.assertIsNone(runtime.require_var("optional_count")["value"])
+        self.assertEqual(runtime.require_var("mixed")["value"], "ready")
+        self.assertTrue(runtime.require_var("is_none")["value"])
+
+    def test_generic_collections_validate_initial_values_and_mutations(self) -> None:
+        runtime = self.run_program(
+            """
+            define var values: list[int] = [1, 2]
+            define var counts: dict[string, int] = {"first": 1}
+            list append values 3
+            dict set counts "second" 2
+            """
+        )
+        self.assertEqual(runtime.require_var("values")["value"], [1, 2, 3])
+        self.assertEqual(runtime.require_var("counts")["value"]["second"], 2)
+
+        for source in (
+            'define var values: list[int] = [1, "wrong"]',
+            'define var values: list[int] = [1]\nlist append values "wrong"',
+            'define var broad: list = [1]\n'
+            'func define append_bad values:list[int]\n'
+            '    list append values "wrong"\n'
+            'endfunc\nfunc call append_bad broad',
+            'define var values: dict[string, int] = {1: "wrong"}',
+        ):
+            output = io.StringIO()
+            with self.subTest(source=source), contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                self.run_program(source)
+            self.assertIn("type", output.getvalue().lower())
+
+    def test_typed_function_signatures_and_references(self) -> None:
+        runtime = self.run_program(
+            """
+            func define increment value:int -> int
+                return value
+            endfunc
+            func define apply callback:(int)->int value:int -> int
+                define var values: list[int] = [value]
+                define var mapped: list[int] = []
+                define var result: int = 0
+                map callback values mapped
+                list get mapped 0 result
+                return result
+            endfunc
+            define var transform: (int)->int = increment
+            define var source: list[int] = [1, 2]
+            define var mapped: list[int] = []
+            define var result: int = 0
+            map transform source mapped
+            func call transform 5 -> result
+            func call apply transform 7 -> result
+            """
+        )
+        self.assertEqual(runtime.require_var("mapped")["value"], [1, 2])
+        self.assertEqual(runtime.require_var("result")["value"], 7)
+
+    def test_typed_function_parameters_and_returns_are_enforced(self) -> None:
+        for source, expected in (
+            (
+                "func define increment value:int -> int\n"
+                "    return value\nendfunc\n"
+                "func call increment 'bad'",
+                "parameter 'value' requires type 'int'",
+            ),
+            (
+                "func define increment value:int -> int\n"
+                "    return 'bad'\nendfunc\n"
+                "define var result: int = 0\nfunc call increment 1 -> result",
+                "must return 'int', got 'string'",
+            ),
+            (
+                "func define increment value -> int\n"
+                "    return value\nendfunc\n"
+                "define var transform: (int)->int = increment",
+                "does not match type '(int) -> int'",
+            ),
+            (
+                "func define increment value:int -> int\n"
+                "    return value\nendfunc\n"
+                "define var transform: (string)->int = increment",
+                "does not match type '(string) -> int'",
+            ),
+        ):
+            output = io.StringIO()
+            with self.subTest(expected=expected), contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                self.run_program(source)
+            self.assertIn(expected, output.getvalue())
 
     def test_integer_results_can_be_assigned_to_float_destinations(self) -> None:
         runtime = self.run_program(

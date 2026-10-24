@@ -2,6 +2,7 @@ import ast
 from typing import Any
 
 from .runtime import TYPES, Runtime
+from .type_system import FunctionReference, format_type, parse_type
 
 
 def _literal(value: str, runtime: Runtime) -> Any:
@@ -46,6 +47,8 @@ def _literal(value: str, runtime: Runtime) -> Any:
         if isinstance(node, ast.Constant):
             return node.value
         if isinstance(node, ast.Name):
+            if node.id == "none":
+                return None
             variable = runtime.get_var(node.id)
             if variable is None:
                 raise ValueError(f"Variable '{node.id}' is not defined.")
@@ -71,11 +74,61 @@ def _literal(value: str, runtime: Runtime) -> Any:
 
 
 def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
-    if expected_type not in TYPES:
+    spec = parse_type(expected_type)
+    expected_type = format_type(spec)
+    if not runtime.type_is_known(expected_type):
         raise ValueError(f"Unknown type: {expected_type}")
 
     data = runtime.get_var(value)
     quoted = len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"')
+
+    if spec.name == "function":
+        if data is not None and isinstance(data["value"], FunctionReference):
+            function = data["value"]
+        else:
+            resolved = runtime.resolve_function(value)
+            if resolved is None:
+                raise ValueError(f"Function '{value}' is not defined.")
+            function = FunctionReference(resolved)
+        if not runtime.value_matches_type(expected_type, function):
+            raise TypeError(
+                f"Function '{value}' does not match type '{expected_type}'."
+            )
+        return function
+
+    if spec.name == "union":
+        if value.lower() == "none":
+            candidate = None
+        elif data is not None:
+            candidate = data["value"]
+        else:
+            function_name = runtime.resolve_function(value)
+            candidate = (
+                FunctionReference(function_name)
+                if function_name is not None
+                else _literal(value, runtime)
+            )
+        if runtime.value_matches_type(expected_type, candidate):
+            return candidate
+        raise TypeError(f"Value does not match type '{expected_type}'.")
+
+    if spec.arguments:
+        if data is not None:
+            candidate = data["value"]
+            if spec.name in ("list", "dict", "set", "tuple"):
+                candidate = TYPES[spec.name](candidate)
+        elif value.lower() == "none":
+            candidate = None
+        else:
+            candidate = _literal(value, runtime)
+        if not runtime.value_matches_type(expected_type, candidate):
+            raise TypeError(f"Value does not match type '{expected_type}'.")
+        return candidate
+
+    if expected_type == "none":
+        if value.lower() == "none":
+            return None
+        raise ValueError("Expected 'none'.")
 
     if expected_type == "string":
         if quoted:
@@ -139,6 +192,10 @@ def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
 def convert_value(value: Any, target_type: str) -> Any:
     if target_type not in TYPES:
         raise ValueError(f"Unknown type: {target_type}")
+    if target_type == "none":
+        if value is None:
+            return None
+        raise TypeError("Only none can be converted to none.")
     if target_type == "bool" and isinstance(value, str):
         if value.lower() not in ("true", "false"):
             raise ValueError("String must be 'true' or 'false'.")

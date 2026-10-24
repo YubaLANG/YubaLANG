@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from lang.interpreter import _split_cached, execute_lines, run_file
+from lang.typecheck import check_types
 
 
 class RuntimeDiagnosticTests(unittest.TestCase):
@@ -200,6 +201,29 @@ class RuntimeDiagnosticTests(unittest.TestCase):
         self.assertIn(f"{source}:3:1: error: Type mismatch:", result.stdout)
         self.assertNotIn("must not execute", result.stdout)
         self.assertEqual(result.stderr, "")
+
+    def test_static_checker_infers_generic_and_function_types(self):
+        diagnostics = check_types(
+            [
+                "func define increment value:int -> int",
+                "    return value",
+                "endfunc",
+                "define var transform: (int)->int = increment",
+                'define var result: string = ""',
+                "func call transform 5 -> result",
+                'define var values: list[int] = [1, "bad"]',
+                "define var optional: int? = none",
+                "func define invalid value:int -> int",
+                "    return 'bad'",
+                "endfunc",
+                'func call increment "bad"',
+            ]
+        )
+        self.assertEqual([line for line, _ in diagnostics], [5, 6, 9, 11])
+        self.assertIn("command result has type 'int'", diagnostics[0][1])
+        self.assertIn("list[int | string]", diagnostics[1][1])
+        self.assertIn("function return has type 'string'", diagnostics[2][1])
+        self.assertIn("parameter requires 'int'", diagnostics[3][1])
 
 
 if __name__ == "__main__":

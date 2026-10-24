@@ -2,6 +2,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
 
@@ -85,6 +86,40 @@ class TestRunnerTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn("missing expected-output file", result.stdout)
+
+    def test_filter_selects_test_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / "alpha.yl").write_text('text output "alpha"\n', encoding="utf-8")
+            (folder / "alpha.expected.txt").write_text("alpha\n", encoding="utf-8")
+            (folder / "beta.yl").write_text('text output "beta"\n', encoding="utf-8")
+            (folder / "beta.expected.txt").write_text("beta\n", encoding="utf-8")
+            result = run_cli("test", "--filter", "bet", folder)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Results: 1 passed, 0 failed, 0 errored", result.stdout)
+        self.assertIn("beta.yl", result.stdout)
+        self.assertNotIn("alpha.yl", result.stdout)
+
+    def test_json_output_contains_structured_results(self):
+        result = run_cli("test", "--json", REPOSITORY_ROOT / "tests" / "cases")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report["counts"]["PASS"], 1)
+        self.assertEqual(report["tests"][0]["status"], "PASS")
+
+    def test_failure_outputs_unified_diff(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / "wrong.yl").write_text('text output "actual"\n', encoding="utf-8")
+            (folder / "wrong.expected.txt").write_text("expected\n", encoding="utf-8")
+            result = run_cli("test", folder)
+
+        self.assertIn("--- expected", result.stdout)
+        self.assertIn("+++ actual", result.stdout)
+        self.assertIn("-expected", result.stdout)
+        self.assertIn("+actual", result.stdout)
 
 
 if __name__ == "__main__":

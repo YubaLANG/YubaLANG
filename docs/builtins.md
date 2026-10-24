@@ -87,20 +87,62 @@ destination; other incompatible assignments report a type error instead of
 leaving the variable's declared type inconsistent with its value. Use
 `convert` when intentionally changing a variable's type.
 
+Collections have no YubaLANG-specific size cap; their practical limits depend
+on available host memory. If allocation raises `MemoryError`, execution
+reports it as a source-located runtime diagnostic rather than exposing a
+Python traceback.
+
+## Type annotations
+
+The built-in scalar types include `none`. Use `T?` as shorthand for a union
+with `none`, and `A | B` for other unions. Generic collection annotations
+check their contents recursively: `list[T]`, `set[T]`, `dict[K, V]`,
+`tuple[T]` (homogeneous), and `tuple[A, B]` (fixed length and per-position
+types). Mutations are checked too, including changes through aliases of a
+typed collection. Generic element types are invariant; an `int` element is not
+silently widened inside `list[float]`.
+
+Functions can declare parameter and return types. Function references may be
+stored in variables with a function type and passed as callbacks:
+
+```hl
+func define increment value:int -> int
+    return value
+endfunc
+
+define var transform: (int)->int = increment
+define var values: list[int] = [1, 2]
+define var results: list[int] = []
+map transform values results
+```
+
+Every parameter and the return type must be annotated, and the function must
+not be variadic, to match a function type. These annotations are enforced at
+calls and returns.
+
 Run `py -3 YubaLANG.py check <file.yl>` to report syntax problems and
-statically-detectable type mismatches without executing the file. The checker
-is conservative: values whose types depend on runtime behavior are left
-unchecked; normal execution still performs runtime checks.
+statically-detectable type mismatches without executing the file. This check
+is opt-in. It infers types from literals, declarations, and supported command
+results, including typed function references and generic literals. Unknown or
+dynamic values are left unchecked; runtime checks remain authoritative.
 
 ## Assertions and runtime limits
 
 `assert <boolean> [message]` stops execution with a source-located error if
 the boolean is false. The optional message must be a string literal or string
-variable. For example:
+variable. Assertions can express function preconditions and postconditions
+using `compare` to produce the boolean:
 
 ```hl
-define var ready: bool = true
-assert ready "the program is ready"
+func define require_positive value
+    define var valid: bool = false
+    compare value > 0 valid
+    assert valid "value must be positive"
+    return value
+endfunc
+
+define var result: int = 0
+func call require_positive 5 -> result
 ```
 
 Use `throw <value>` with `try`, optional `catch [name]`, and optional

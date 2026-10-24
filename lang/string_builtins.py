@@ -18,6 +18,8 @@ def resolve(value: str, runtime: Runtime) -> Any:
         return result
     if value.lower() in ("true", "false"):
         return value.lower() == "true"
+    if value.lower() == "none":
+        return None
     try:
         return float(value) if "." in value else int(value)
     except ValueError:

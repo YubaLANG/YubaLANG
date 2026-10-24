@@ -20,21 +20,31 @@ client for arbitrary language servers.
 
 ## Supported features
 
-- Open, full-document change, and close notifications.
+- Open, full-document and ranged change, and close notifications.
 - Syntax diagnostics for malformed quoting, invalid or unknown commands,
   invalid declarations, and unclosed or mismatched blocks.
 - Go to definition for declared variables, function parameters, and functions.
 - Hover documentation for language commands, built-ins, and types.
+- Completion for commands, types, and symbols in open documents.
+- Signature help for user-defined functions.
+- Find references and rename for symbols in open documents.
+- Document and workspace symbol search.
+- Quick fixes for misspelled command names.
+- Incremental document changes with stale-version rejection.
 
 Diagnostics and symbol lookup are static and intentionally do not execute
-programs. The server currently uses full-document synchronization; editors
-should send the complete updated document in each change notification.
+programs. Editors may send full or ranged document changes with monotonically
+increasing versions. Rename, references, and workspace symbols are limited to
+open documents; unopened files are not searched or changed. Completion and
+signature help are best-effort suggestions, not a complete semantic type
+engine.
 
 ## Try it
 
 Open [`examples\functions.yl`](../examples/functions.yl) in an LSP-capable
 editor configured to launch the command above. Hover over `func`, `return`,
-or `filter`, and use Go to Definition on `is_positive` or `values`.
+or `filter`; try completion, signature help, references, and rename on
+`is_positive` or `values`.
 
 To verify the stdio server without an editor, run the automated tests from the
 repository root:

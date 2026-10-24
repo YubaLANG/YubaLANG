@@ -38,17 +38,30 @@ with `-Uninstall`. The Windows installer removes its PATH entry as well.
 
 ```text
 YubaLANG.exe path\to\program.yl
+YubaLANG run .
+YubaLANG repl
 YubaLANG fmt --check .
-YubaLANG test
+YubaLANG test --filter collection
 YubaLANG package init
 ```
 
 On macOS and Linux, the executable is named `YubaLANG` (without `.exe`).
 The test command discovers `*.yl` files in `tests/cases` by default; each test
 needs a sibling `<name>.expected.txt` file containing its exact expected
-standard output. Output comparison is the assertion mechanism; there is no
-in-language assertion API yet. Tests are non-interactive and do not provide
-setup/teardown hooks.
+standard output. Use `--filter PATTERN` to run matching test names and `--json`
+for structured results and failure details. Tests are non-interactive and do
+not provide setup/teardown hooks.
+
+The runner compares process output and does not report statement or function
+coverage. Each test runs in a separate interpreter process, and the runtime
+does not expose source-level execution counters; coverage percentages would
+be misleading until those counters are available.
+
+`YubaLANG run [project-directory]` executes the manifest entry point and
+validates installed dependencies against the lockfile. `YubaLANG repl` starts
+an interactive session; enter `exit` or `quit` to leave, or `reset` to clear
+variables and functions. Multiline blocks are entered through their matching
+closing commands.
 
 Projects can be initialized and dependencies managed with `YubaLANG package`.
 See the [project and package guide](package-manager.md) for manifests,
