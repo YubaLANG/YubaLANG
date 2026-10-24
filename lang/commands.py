@@ -84,6 +84,8 @@ def execute_command(
             raise SyntaxError("Usage: define var <name>: <type> = <value>")
         equal_index = parts.index("=")
         name = parts[2][:-1]
+        if not name.isidentifier():
+            raise SyntaxError("Variable name must be an identifier.")
         value_type = format_type(parse_type(" ".join(parts[3:equal_index])))
         if not runtime.type_is_known(value_type):
             raise ValueError(f"Unknown type: {value_type}")

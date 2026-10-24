@@ -10,6 +10,7 @@ provide additional installation and operational detail.
 
 - [Running YubaLANG](#running-yubalang)
 - [Source syntax](#source-syntax)
+- [Lexical rules and evaluation](#lexical-rules-and-evaluation)
 - [Variables and types](#variables-and-types)
 - [Expressions and literals](#expressions-and-literals)
 - [Commands and built-ins](#commands-and-built-ins)
@@ -47,6 +48,7 @@ When running from a source checkout, use `py -3 YubaLANG.py` instead of
 
 The [installation guide](install.md) documents supported release platforms,
 installers, and executable distribution.
+New users can start with the [getting-started guide](getting-started.md).
 
 ## Source syntax
 
@@ -63,6 +65,25 @@ text output "Hello!" # Inline comment
 
 Strings may use single or double quotes. Common escapes include `\n`, `\t`,
 `\\`, `\"`, and `\'`. Quote Windows path backslashes as `\\`.
+
+## Lexical rules and evaluation
+
+Each nonblank source line contains one command. There is no line-continuation
+syntax; indentation is not significant to execution, and block structure is
+defined by opening and closing commands. A `#` outside a quoted string starts
+a comment that continues to the end of the line.
+
+Variable names must be valid identifiers according to Python's Unicode
+identifier rules (`str.isidentifier()`); for example, `count`, `_index`, and
+`café` are valid, while `2count` and `count-value` are not. Identifier
+keywords are not reserved solely by their spelling.
+
+Values are literals or variable references. Supported literal forms include
+numbers, quoted strings, booleans, `none`, and list, dictionary, set, and tuple
+literals. A literal may contain variable references. Unary `+` and `-` apply
+to numeric values; arithmetic commands such as `arith add` produce output
+rather than an expression value. YubaLANG has no general operator expressions
+or line continuation.
 
 ## Variables and types
 

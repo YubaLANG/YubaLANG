@@ -37,15 +37,15 @@ with `-Uninstall`. The Windows installer removes its PATH entry as well.
 ## First run
 
 ```text
+YubaLANG.exe check path\to\program.yl
 YubaLANG.exe path\to\program.yl
-YubaLANG run .
 YubaLANG repl
 YubaLANG fmt --check .
-YubaLANG test --filter collection
 YubaLANG package init
 ```
 
 On macOS and Linux, the executable is named `YubaLANG` (without `.exe`).
+For a guided first program, see the [getting-started guide](getting-started.md).
 The test command discovers `*.yl` files in `tests/cases` by default; each test
 needs a sibling `<name>.expected.txt` file containing its exact expected
 standard output. Use `--filter PATTERN` to run matching test names and `--json`

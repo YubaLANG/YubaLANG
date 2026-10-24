@@ -300,6 +300,8 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
                 or not parts[2].endswith(":") or parts[4] != "="
             ):
                 error = "Usage: define var <name>: <type> = <value>"
+            elif not parts[2][:-1].isidentifier():
+                error = "Variable name must be an identifier."
             elif parts[3] not in TYPES and parts[3] not in record_types:
                 code = "unknown-type"
                 error = f"Unknown type: {parts[3]}"

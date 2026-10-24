@@ -8,10 +8,40 @@ from pathlib import Path
 from unittest import mock
 
 from lang.interpreter import _split_cached, execute_lines, run_file
+from lang.lsp import analyze_document
 from lang.typecheck import check_types
 
 
 class RuntimeDiagnosticTests(unittest.TestCase):
+    def test_variable_declarations_reject_invalid_identifiers(self):
+        source = "define var not-valid: int = 1"
+        output = io.StringIO()
+
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            execute_lines([source], source_name="identifier.yl")
+
+        self.assertIn(
+            "identifier.yl:1:1: error: Variable name must be an identifier.",
+            output.getvalue(),
+        )
+        diagnostics = analyze_document(source)
+        self.assertEqual(len(diagnostics), 1)
+        self.assertEqual(
+            diagnostics[0]["message"], "Variable name must be an identifier."
+        )
+
+    def test_variable_declarations_accept_unicode_identifiers(self):
+        source = [
+            "define var café: string = 'bonjour'",
+            "text output café",
+        ]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            execute_lines(source, source_name="identifier.yl")
+
+        self.assertEqual(output.getvalue(), "bonjour\n")
+        self.assertEqual(analyze_document("\n".join(source)), [])
+
     def test_file_diagnostic_includes_location_snippet_and_variable_suggestion(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "example.yl"

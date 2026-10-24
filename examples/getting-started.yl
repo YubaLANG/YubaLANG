@@ -1,0 +1,19 @@
+define var learner: string = "Ada"
+define var score: int = 85
+define var passed: bool = false
+
+compare score >= 60 passed
+
+if passed
+    text output "Welcome!"
+    text output learner
+else
+    text output "Keep practicing."
+endif
+
+func define congratulate name
+    text output "Good job!"
+    text output name
+endfunc
+
+func call congratulate learner

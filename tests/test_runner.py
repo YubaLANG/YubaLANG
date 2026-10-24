@@ -34,6 +34,13 @@ class TestRunnerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Results: 1 passed, 0 failed, 0 errored", result.stdout)
 
+    def test_getting_started_example_matches_its_expected_output(self):
+        example = REPOSITORY_ROOT / "examples" / "getting-started.yl"
+        result = run_cli("test", example)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Results: 1 passed, 0 failed, 0 errored", result.stdout)
+
     def test_reports_output_mismatch_and_nonzero_exit(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
