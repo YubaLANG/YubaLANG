@@ -7,13 +7,14 @@ from typing import Any, BinaryIO
 
 from .interpreter import _split
 from .runtime import TYPES
+from .typecheck import check_types
 
 
 _IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 _LEXEME = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|#[^\r\n]*|[A-Za-z_]\w*')
 _COMMANDS = {
-    "all", "any", "arith", "ascii", "bool", "break", "bytearray", "bytes",
-    "callable", "chr", "compare", "continue", "convert", "define", "dict",
+    "all", "any", "arith", "ascii", "assert", "bool", "break", "bytearray", "bytes",
+    "callable", "chr", "close", "compare", "continue", "convert", "define", "dict",
     "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "if",
     "id", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "repr",
@@ -33,6 +34,8 @@ _ARITY: dict[str, tuple[int, ...]] = {
 }
 _HOVER: dict[str, str] = {
     "define": "**`define var <name>: <type> = <value>`** declares a variable.",
+    "assert": "**`assert <boolean> [message]`** raises a source-located error when false.",
+    "close": "**`close <file_variable>`** closes an open file.",
     "convert": "**`convert <variable> to <type>`** changes a variable's value and type.",
     "arith": "**`arith <operation> <value> [value]`** performs arithmetic and prints the result.",
     "compare": "**`compare <left> <operator> <right> <bool_variable>`** stores a comparison.",
@@ -243,12 +246,19 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
             elif parts[3] not in TYPES:
                 code = "unknown-type"
                 error = f"Unknown type: {parts[3]}"
+        elif command == "assert" and len(parts) not in (2, 3):
+            error = "Usage: assert <boolean> [message]"
+        elif command == "close" and len(parts) != 2:
+            error = "Usage: close <file_variable>"
         elif command in _ARITY and len(parts) not in _ARITY[command]:
             error = f"Invalid {command} command or arguments."
         elif command == "import" and len(parts) == 4 and parts[2] != "as":
             error = "Usage: import <module> [as <namespace>]"
         elif command == "convert" and len(parts) == 4 and parts[2] != "to":
             error = "Usage: convert <variable> to <type>"
+        elif command == "convert" and parts[-1] not in TYPES:
+            code = "unknown-type"
+            error = f"Unknown type: {parts[-1]}"
         elif command == "arith" and len(parts) not in (3, 4):
             error = "Usage: arith <operation> <value> [value]"
         elif command == "text":
@@ -278,6 +288,11 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
                 f"Missing closing command for {block} block.", "unclosed-block",
             )
         )
+    for line_number, message in check_types(lines):
+        diagnostics.append(
+            _diagnostic(line_number, lines[line_number], message, "type-mismatch")
+        )
+    diagnostics.sort(key=lambda item: item["range"]["start"]["line"])
     return diagnostics
 
 

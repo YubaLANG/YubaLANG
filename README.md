@@ -11,6 +11,10 @@ A fast programming language with a hierarchical syntax built for modern programm
 * [Projects, imports, and package management](docs/package-manager.md)
 * [Calling C functions](docs/c-abi.md)
 * [Runnable example programs](examples/)
+* [Runtime performance benchmarks](docs/performance.md)
+
+Run `py -3 YubaLANG.py check <file.yl>` for non-executing syntax and
+statically-detectable type diagnostics.
 
 ## License
 

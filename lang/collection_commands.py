@@ -17,19 +17,17 @@ def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
         return
     if collection_type == "list" and action == "get" and len(parts) == 5:
         index, destination = int(parts[3]), parts[4]
-        target = runtime.require_var(destination)
-        runtime.update_var(destination, target["type"], collection[index])
+        runtime.assign_var(destination, collection[index])
         return
     if collection_type == "list" and action == "len" and len(parts) == 4:
-        runtime.update_var(parts[3], "int", len(collection))
+        runtime.assign_var(parts[3], len(collection))
         return
     if collection_type == "dict" and action == "set" and len(parts) == 5:
         collection[resolve(parts[3], runtime)] = resolve(parts[4], runtime)
         return
     if collection_type == "dict" and action == "get" and len(parts) == 5:
         key, destination = resolve(parts[3], runtime), parts[4]
-        target = runtime.require_var(destination)
-        runtime.update_var(destination, target["type"], collection[key])
+        runtime.assign_var(destination, collection[key])
         return
     if collection_type == "set" and action in ("add", "remove") and len(parts) == 4:
         value = resolve(parts[3], runtime)
@@ -40,7 +38,6 @@ def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
         return
     if collection_type == "tuple" and action == "get" and len(parts) == 5:
         index, destination = int(parts[3]), parts[4]
-        target = runtime.require_var(destination)
-        runtime.update_var(destination, target["type"], collection[index])
+        runtime.assign_var(destination, collection[index])
         return
     raise SyntaxError(f"Invalid {collection_type} operation or arguments.")

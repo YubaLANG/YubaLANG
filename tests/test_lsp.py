@@ -36,6 +36,28 @@ class LanguageServerTests(unittest.TestCase):
         self.assertEqual(diagnostics[1]["range"]["start"], {"line": 1, "character": 0})
         self.assertEqual(diagnostics[1]["range"]["end"], {"line": 1, "character": 15})
 
+    def test_reports_definite_type_mismatches_without_executing_source(self):
+        diagnostics = analyze_document(
+            'define var label: string = ""\n'
+            "define var values: list = [1, 2]\n"
+            "list len values label\n"
+        )
+        mismatch = next(item for item in diagnostics if item["code"] == "type-mismatch")
+        self.assertEqual(mismatch["range"]["start"], {"line": 2, "character": 0})
+        self.assertIn("destination 'label' has type 'string'", mismatch["message"])
+
+    def test_reports_invalid_assert_types_and_unknown_conversion_types(self):
+        diagnostics = analyze_document(
+            "assert 1\n"
+            "convert value to integer\n"
+        )
+        self.assertEqual(
+            [item["code"] for item in diagnostics],
+            ["type-mismatch", "unknown-type"],
+        )
+        self.assertIn("assert condition has type 'int'", diagnostics[0]["message"])
+        self.assertIn("Unknown type: integer", diagnostics[1]["message"])
+
     def test_recognizes_ffi_command_and_provides_hover(self):
         source = 'ffi call "./libnative.so" add i32 i32 1 -> result\n'
         self.assertEqual(analyze_document(source), [])
@@ -53,6 +75,16 @@ class LanguageServerTests(unittest.TestCase):
             },
         })
         self.assertIn("C ABI function", hover["result"]["contents"]["value"])
+
+    def test_recognizes_assert_command_and_validates_arity(self):
+        self.assertEqual(analyze_document('assert ready "not ready"\n'), [])
+        diagnostics = analyze_document("assert\n")
+        self.assertEqual(diagnostics[0]["message"], "Usage: assert <boolean> [message]")
+
+    def test_recognizes_close_command_and_validates_arity(self):
+        self.assertEqual(analyze_document("close handle\n"), [])
+        diagnostics = analyze_document("close\n")
+        self.assertEqual(diagnostics[0]["message"], "Usage: close <file_variable>")
 
     def test_recognizes_import_syntax_and_provides_hover(self):
         self.assertEqual(analyze_document("import helpers as tools\n"), [])

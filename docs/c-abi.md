@@ -26,6 +26,11 @@ the declaration exactly. YubaLANG reports library loading errors, missing
 symbols, unsupported types, invalid arguments, and incompatible destinations
 as source diagnostics.
 
+The bridge relies on Python's `ctypes.CDLL` and the host platform's native
+dynamic-library loader. The library must be built for the same operating
+system, architecture, and calling convention as the running interpreter;
+YubaLANG does not cross-compile or translate ABIs.
+
 ## Ownership and safety
 
 Only values passed by value are supported. No pointers, strings, arrays,

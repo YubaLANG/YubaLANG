@@ -14,8 +14,8 @@ _UNKNOWN_TYPE = re.compile(r"Unknown type: ([A-Za-z_]\w*)")
 _IMPORT_NOT_FOUND = re.compile(r"Module '([^']+)' was not found;")
 
 _COMMANDS = {
-    "all", "any", "arith", "ascii", "bool", "break", "bytearray", "bytes",
-    "callable", "chr", "compare", "continue", "convert", "define", "dict",
+    "all", "any", "arith", "ascii", "assert", "bool", "break", "bytearray", "bytes",
+    "callable", "chr", "close", "compare", "continue", "convert", "define", "dict",
     "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "id",
     "if", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "repr", "return", "reversed", "set", "setattr", "slice",
@@ -76,6 +76,10 @@ def _context_hint(
         return "Check that the collection index is within its valid range."
     if isinstance(error, SyntaxError):
         return "Check the command syntax and its required arguments."
+    if isinstance(error, RecursionError):
+        return "Check that recursive functions eventually reach a stopping condition."
+    if isinstance(error, MemoryError):
+        return "Reduce the size of collections or intermediate values used by the program."
     return None
 
 

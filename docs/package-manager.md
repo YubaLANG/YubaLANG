@@ -113,7 +113,9 @@ implementation details. An `as` alias must be a valid identifier.
 
 Missing modules and package/lockfile problems are reported with an actionable
 source diagnostic or package-manager error. Importing a module executes its
-top-level commands, so only use source code from packages you trust. YubaLANG
+top-level commands. Imported code runs with the program's privileges; YubaLANG
+does not sandbox modules or dependencies, so only use source code from packages
+you trust. YubaLANG
 currently supports direct path and Git dependencies only; it does not have a
 public package registry, version-range solver, or transitive dependency
 resolver.

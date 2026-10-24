@@ -127,6 +127,52 @@ class BuiltinCommandTests(unittest.TestCase):
         self.assertIn("line 2:", output.getvalue())
         self.assertIn("text output missing", output.getvalue())
 
+    def test_assert_command_accepts_booleans_and_reports_failures(self) -> None:
+        runtime = self.run_program(
+            """
+            define var ready: bool = true
+            assert ready
+            assert true "ready"
+            """
+        )
+        self.assertTrue(runtime.require_var("ready")["value"])
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            self.run_program('assert false "expected failure"')
+        self.assertIn("Assertion failed: expected failure", output.getvalue())
+
+    def test_assert_command_requires_a_boolean(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            self.run_program("assert 1")
+        self.assertIn("Assertion condition must be a boolean.", output.getvalue())
+
+    def test_result_destinations_enforce_declared_types(self) -> None:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            self.run_program(
+                """
+                define var text: string = ""
+                define var numbers: list = [1, 2]
+                list len numbers text
+                """
+            )
+        self.assertIn(
+            "Cannot assign a int value to variable 'text' of type 'string'.",
+            output.getvalue(),
+        )
+
+    def test_integer_results_can_be_assigned_to_float_destinations(self) -> None:
+        runtime = self.run_program(
+            """
+            define var result: float = 0.0
+            define var numbers: list = [1, 2]
+            list len numbers result
+            """
+        )
+        self.assertEqual(runtime.require_var("result"), {"type": "float", "value": 2.0})
+
     def test_existing_collection_and_utility_commands(self) -> None:
         runtime = self.run_program(
             """
@@ -310,6 +356,34 @@ class BuiltinCommandTests(unittest.TestCase):
             self.assertTrue(opened_file.exists())
             opened_file.unlink()
         self.assertEqual(output.getvalue().splitlines(), ["from file"])
+
+    def test_run_file_closes_files_opened_in_function_scopes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "program.yl"
+            opened_file = Path(directory) / "opened.txt"
+            escaped_path = str(opened_file).replace("\\", "\\\\")
+            source.write_text(
+                "func define create_file\n"
+                f'    open "{escaped_path}" "w" handle\n'
+                "endfunc\n"
+                "func call create_file\n",
+                encoding="utf-8",
+            )
+
+            run_file(str(source))
+            opened_file.rename(Path(directory) / "renamed.txt")
+
+    def test_close_command_closes_and_unregisters_a_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output_file = Path(directory) / "output.txt"
+            escaped_path = str(output_file).replace("\\", "\\\\")
+            runtime = self.run_program(
+                f'open "{escaped_path}" "w" handle\n'
+                "close handle"
+            )
+
+        self.assertTrue(runtime.require_var("handle")["value"].closed)
+        self.assertEqual(runtime.open_files, [])
 
     def test_invalid_chr_reports_runtime_error(self) -> None:
         output = io.StringIO()

@@ -5,8 +5,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from lang.interpreter import execute_lines, run_file
+from lang.interpreter import _split_cached, execute_lines, run_file
 
 
 class RuntimeDiagnosticTests(unittest.TestCase):
@@ -89,6 +90,47 @@ class RuntimeDiagnosticTests(unittest.TestCase):
         self.assertIn("line 2: text output 'unfinished", diagnostic)
         self.assertIn("Check the command syntax", diagnostic)
 
+    def test_recursive_function_limit_has_a_source_diagnostic(self):
+        output = io.StringIO()
+        source = [
+            "func define recurse",
+            "    func call recurse",
+            "endfunc",
+            "func call recurse",
+        ]
+
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            execute_lines(source, source_name="recursion.yl")
+
+        diagnostic = output.getvalue()
+        self.assertIn("Maximum function call depth (128) exceeded.", diagnostic)
+        self.assertIn("hint: Check that recursive functions eventually reach a stopping condition.", diagnostic)
+        self.assertNotIn("Traceback", diagnostic)
+
+    def test_command_tokenization_cache_reuses_immutable_results(self):
+        _split_cached.cache_clear()
+        with mock.patch(
+            "lang.interpreter.shlex.split",
+            return_value=["text", "output", "ok"],
+        ) as split:
+            first = _split_cached("text output ok")
+            second = _split_cached("text output ok")
+        self.assertEqual(first, ("text", "output", "ok"))
+        self.assertEqual(second, first)
+        self.assertIs(first, second)
+        split.assert_called_once()
+        _split_cached.cache_clear()
+
+    def test_memory_exhaustion_has_a_source_diagnostic(self):
+        output = io.StringIO()
+        with mock.patch("lang.interpreter.execute_command", side_effect=MemoryError):
+            with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                execute_lines(["text output 'hello'"], source_name="large.yl")
+
+        self.assertIn("large.yl:1:1: error:", output.getvalue())
+        self.assertIn("Reduce the size of collections", output.getvalue())
+        self.assertNotIn("Traceback", output.getvalue())
+
     def test_cli_reports_source_error_without_python_traceback(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "broken.yl"
@@ -102,6 +144,28 @@ class RuntimeDiagnosticTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 1)
         self.assertIn(f"{source}:1:", result.stdout)
+        self.assertEqual(result.stderr, "")
+
+    def test_cli_type_check_reports_definite_mismatch_without_running(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "type_error.yl"
+            source.write_text(
+                'define var label: string = ""\n'
+                "define var values: list = [1, 2]\n"
+                "list len values label\n"
+                'text output "must not execute"\n',
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [sys.executable, "YubaLANG.py", "check", str(source)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"{source}:3:1: error: Type mismatch:", result.stdout)
+        self.assertNotIn("must not execute", result.stdout)
         self.assertEqual(result.stderr, "")
 
 

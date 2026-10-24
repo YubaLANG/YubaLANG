@@ -11,8 +11,7 @@ from .string_builtins import resolve
 
 
 def _assign(runtime: Runtime, name: str, value: Any) -> None:
-    target = runtime.require_var(name)
-    runtime.update_var(name, target["type"], value)
+    runtime.assign_var(name, value)
 
 
 def _comparison_value(value: str, runtime: Runtime) -> Any:
@@ -84,6 +83,19 @@ def execute_command(
         runtime.define_var(name, value_type, value)
         return
 
+    if command == "assert":
+        if len(parts) not in (2, 3):
+            raise SyntaxError("Usage: assert <boolean> [message]")
+        condition = resolve(parts[1], runtime)
+        if not isinstance(condition, bool):
+            raise TypeError("Assertion condition must be a boolean.")
+        if not condition:
+            message = resolve(parts[2], runtime) if len(parts) == 3 else "Assertion failed."
+            if not isinstance(message, str):
+                raise TypeError("Assertion message must be a string.")
+            raise AssertionError(f"Assertion failed: {message}")
+        return
+
     if command == "convert":
         if len(parts) == 4 and parts[2] == "to":
             name, target_type = parts[1], parts[3]
@@ -128,14 +140,14 @@ def execute_command(
         result = operations[parts[2]](
             _comparison_value(parts[1], runtime), _comparison_value(parts[3], runtime)
         )
-        runtime.update_var(parts[4], "bool", result)
+        runtime.assign_var(parts[4], result)
         return
 
     if command in ("list", "dict", "set", "tuple"):
         execute_collection_command(parts, runtime)
         return
 
-    if command in ("text", "open"):
+    if command in ("text", "open", "close"):
         execute_io_command(parts, runtime)
         return
 
@@ -287,8 +299,7 @@ def execute_command(
         step = int(resolve(parts[5], runtime)) if len(parts) == 6 else None
         result = iteration.slice_values(source["value"], start, stop, step)
         destination = parts[4]
-        target = runtime.require_var(destination)
-        runtime.update_var(destination, target["type"], result)
+        runtime.assign_var(destination, result)
         return
 
     if command == "sorted":
@@ -323,8 +334,7 @@ def _execute_attribute_command(parts: list[str], runtime: Runtime) -> None:
     obj = variable["value"]
     if command == "getattr":
         value = obj[attr_name] if isinstance(obj, dict) else getattr(obj, attr_name)
-        target = runtime.require_var(destination)
-        runtime.update_var(destination, target["type"], value)
+        runtime.assign_var(destination, value)
     elif command == "hasattr":
         _assign(runtime, destination, attr_name in obj if isinstance(obj, dict) else hasattr(obj, attr_name))
     else:

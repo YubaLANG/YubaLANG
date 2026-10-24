@@ -2,6 +2,7 @@
 
 import shlex
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from .packages import (
     resolve_dependency,
     resolve_entry,
 )
-from .runtime import Runtime, TYPES, UserFunction
+from .runtime import MAX_FUNCTION_CALL_DEPTH, Runtime, TYPES, UserFunction
 from .string_builtins import resolve
 
 
@@ -33,11 +34,16 @@ class ContinueException(Exception):
     pass
 
 
-def _split(line: str) -> list[str]:
+@lru_cache(maxsize=4096)
+def _split_cached(line: str) -> tuple[str, ...]:
     try:
-        return shlex.split(line, posix=False, comments=True)
+        return tuple(shlex.split(line, posix=False, comments=True))
     except ValueError as error:
         raise SyntaxError(f"Invalid command quoting: {error}") from error
+
+
+def _split(line: str) -> list[str]:
+    return list(_split_cached(line))
 
 
 def _type_of(value: Any) -> str:
@@ -71,6 +77,10 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
     resolved_name = runtime.resolve_function(name)
     if resolved_name is None:
         raise ValueError(f"Function '{name}' is not defined.")
+    if runtime.function_call_depth >= MAX_FUNCTION_CALL_DEPTH:
+        raise RecursionError(
+            f"Maximum function call depth ({MAX_FUNCTION_CALL_DEPTH}) exceeded."
+        )
     function = runtime.functions[resolved_name]
     if len(arguments) != len(function.parameters):
         raise TypeError(
@@ -84,6 +94,7 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
     }
     runtime.scopes.append(local_scope)
     runtime.current_namespaces.append(function.namespace)
+    runtime.function_call_depth += 1
     try:
         execute_lines(
             function.body,
@@ -95,6 +106,7 @@ def _invoke_function(name: str, arguments: list[Any], runtime: Runtime) -> Any:
     except ReturnException as result:
         return result.value if result.has_value else None
     finally:
+        runtime.function_call_depth -= 1
         runtime.current_namespaces.pop()
         runtime.scopes.pop()
     return None
@@ -119,8 +131,7 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
     if destination is not None:
         if result is None:
             raise ValueError(f"Function '{name}' did not return a value.")
-        target = runtime.require_var(destination)
-        runtime.update_var(destination, target["type"], result)
+        runtime.assign_var(destination, result)
 
 
 def _module_file(module_name: str, runtime: Runtime, source_name: str) -> Path:
@@ -352,7 +363,8 @@ def execute_lines(
                 interpret(raw_line, runtime, source_name)
         except (
             SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError,
-            KeyError, AttributeError, OverflowError, OSError, EOFError,
+            KeyError, AttributeError, OverflowError, OSError, EOFError, RecursionError,
+            AssertionError, MemoryError,
         ) as error:
             print(format_diagnostic(error, source_name, statement_line, source_line, runtime))
             raise SystemExit(1) from error
@@ -369,10 +381,7 @@ def run_file(filename: str) -> None:
     except ReturnException:
         pass
     finally:
-        for scope in runtime.scopes:
-            for variable in scope.values():
-                if variable["type"] == "file":
-                    variable["value"].close()
+        runtime.close_files()
 
 
 if __name__ == "__main__":

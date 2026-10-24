@@ -1,3 +1,5 @@
+from io import IOBase
+
 from .runtime import Runtime
 from .string_builtins import resolve
 
@@ -26,7 +28,7 @@ def execute_io_command(parts: list[str], runtime: Runtime) -> None:
             variable = runtime.require_var(parts[2])
             if variable["type"] != "string":
                 raise TypeError(f"Variable '{parts[2]}' must be a string for text input.")
-            runtime.update_var(parts[2], "string", input())
+            runtime.assign_var(parts[2], input())
             return
         raise SyntaxError("Usage: text <input/output> <value>")
 
@@ -34,11 +36,22 @@ def execute_io_command(parts: list[str], runtime: Runtime) -> None:
         path, mode, destination = (resolve(parts[1], runtime), resolve(parts[2], runtime), parts[3])
         if not isinstance(path, str) or not isinstance(mode, str):
             raise TypeError("open() path and mode must be strings.")
+        existing = runtime.get_var(destination)
+        if existing is not None and existing["type"] != "file":
+            raise TypeError(f"Variable '{destination}' must be a file destination.")
         file_obj = open(path, mode, encoding=None if "b" in mode else "utf-8")
-        if runtime.get_var(destination) is None:
+        runtime.register_file(file_obj)
+        if existing is None:
             runtime.define_var(destination, "file", file_obj)
         else:
-            runtime.update_var(destination, "file", file_obj)
+            runtime.assign_var(destination, file_obj)
+        return
+
+    if parts[0] == "close" and len(parts) == 2:
+        variable = runtime.require_var(parts[1])
+        if variable["type"] != "file" or not isinstance(variable["value"], IOBase):
+            raise TypeError(f"Variable '{parts[1]}' must be an open file.")
+        runtime.close_file(variable["value"])
         return
 
     raise SyntaxError(f"Invalid {parts[0]} command or arguments.")

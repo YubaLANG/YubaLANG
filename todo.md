@@ -76,14 +76,21 @@ programs and imports installed packages.
 - [ ] Design an optional static type-checking mode with source-located
   diagnostics and gradual adoption; keep runtime checks where static
   information is unavailable.
+- [x] Add an opt-in `check` command and editor diagnostics for statically
+  detectable mismatches, while leaving dynamic cases to runtime.
 - [ ] Define type inference, union/optional types, function types, and
   generic types before implementing advanced annotations.
 - [ ] Add structured language exceptions with throw/raise, catch, finally,
   and stack traces, preserving concise diagnostics for uncaught errors.
 - [ ] Define resource cleanup and deterministic close behavior for files,
   iterators, and future native resources.
+- [x] Track opened files across function scopes, close them at file-run
+  completion, and add an explicit `close` command.
 - [ ] Add assertions and explicit precondition/postcondition helpers for
   library and test code.
+- [x] Add a source-located `assert <boolean> [message]` command.
+- [x] Check runtime result assignments against destination variable types,
+  allowing integer-to-float widening.
 
 ### Standard library and platform APIs
 
@@ -104,14 +111,25 @@ programs and imports installed packages.
 
 - [ ] Profile representative programs and establish reproducible startup,
   memory, and execution benchmarks before optimizing.
+- [x] Add reproducible startup, function, arithmetic, collection, and traced
+  memory measurements.
 - [ ] Reduce interpreter dispatch and repeated parsing costs without changing
   program output or diagnostics.
+- [x] Cache immutable command-tokenization results and add an in-process
+  benchmark to measure interpreter execution separately from Python startup.
 - [ ] Define and test recursion limits, large collection behavior, and
   resource-exhaustion error handling.
+- [x] Enforce a 128-call user-function depth limit with a source-located
+  diagnostic.
+- [x] Report caught memory exhaustion as a source diagnostic with a
+  collection-sizing hint.
+- [x] Add reproducible startup and function-call benchmark baselines.
 - [ ] Add an optional bytecode or cached intermediate representation only if
   benchmarks demonstrate a real benefit and cache invalidation is robust.
 - [ ] Document the trust boundary for imported modules and native libraries;
   never imply that running third-party packages is sandboxed.
+- [x] Document that imported code runs with the program's privileges and is
+  not sandboxed.
 - [ ] Specify FFI ABI, ownership, string/buffer lifetime, error propagation,
   and supported platforms before broadening native interop.
 - [ ] Consider a safe extension mechanism for non-C host integrations only

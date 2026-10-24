@@ -74,3 +74,31 @@ The interpreter also supports `all`, `any`, `bool`, `callable`, `id`, `len`,
 `type`, `vars`, `bin`, `divmod`, `hex`, `oct`, `pow`, `convert`, `bytes`,
 `bytearray`, `getattr`, `hasattr`, `setattr`, and `open`. Arithmetic commands
 use `arith <operation> <value>` or `arith <operation> <value1> <value2>`.
+Use `close <file_variable>` to close a file before the program ends; open files
+are also closed automatically when a file run finishes.
+
+Commands that write to a destination variable check the result against that
+variable's declared type. An integer result may be widened to a `float`
+destination; other incompatible assignments report a type error instead of
+leaving the variable's declared type inconsistent with its value. Use
+`convert` when intentionally changing a variable's type.
+
+Run `py -3 YubaLANG.py check <file.yl>` to report syntax problems and
+statically-detectable type mismatches without executing the file. The checker
+is conservative: values whose types depend on runtime behavior are left
+unchecked; normal execution still performs runtime checks.
+
+## Assertions and runtime limits
+
+`assert <boolean> [message]` stops execution with a source-located error if
+the boolean is false. The optional message must be a string literal or string
+variable. For example:
+
+```hl
+define var ready: bool = true
+assert ready "the program is ready"
+```
+
+User-defined functions may be nested up to 128 calls deep. Exceeding this
+limit reports a source-located recursion error instead of exposing an
+interpreter traceback.
