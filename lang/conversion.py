@@ -1,76 +1,12 @@
-import ast
 from typing import Any
 
 from .runtime import TYPES, Runtime
+from .expressions import evaluate_expression
 from .type_system import FunctionReference, format_type, parse_type
 
 
 def _literal(value: str, runtime: Runtime) -> Any:
-    normalized = []
-    quote = None
-    escaped = False
-    index = 0
-    while index < len(value):
-        char = value[index]
-        if quote is not None:
-            normalized.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == quote:
-                quote = None
-            index += 1
-            continue
-        if char in ("'", '"'):
-            quote = char
-            normalized.append(char)
-            index += 1
-            continue
-        matched = False
-        for language_value, python_value in (("true", "True"), ("false", "False")):
-            end = index + len(language_value)
-            if value[index:end].lower() == language_value:
-                before = value[index - 1] if index else ""
-                after = value[end] if end < len(value) else ""
-                if not (before.isalnum() or before == "_") and not (after.isalnum() or after == "_"):
-                    normalized.append(python_value)
-                    index = end
-                    matched = True
-                    break
-        if not matched:
-            normalized.append(char)
-            index += 1
-    expression = ast.parse("".join(normalized), mode="eval").body
-
-    def evaluate(node: ast.expr) -> Any:
-        if isinstance(node, ast.Constant):
-            return node.value
-        if isinstance(node, ast.Name):
-            if node.id == "none":
-                return None
-            variable = runtime.get_var(node.id)
-            if variable is None:
-                raise ValueError(f"Variable '{node.id}' is not defined.")
-            return variable["value"]
-        if isinstance(node, ast.List):
-            return [evaluate(item) for item in node.elts]
-        if isinstance(node, ast.Tuple):
-            return tuple(evaluate(item) for item in node.elts)
-        if isinstance(node, ast.Set):
-            return {evaluate(item) for item in node.elts}
-        if isinstance(node, ast.Dict):
-            return {evaluate(key): evaluate(item) for key, item in zip(node.keys, node.values)}
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
-            number = evaluate(node.operand)
-            if not isinstance(number, (int, float)) or isinstance(number, bool):
-                raise ValueError("Unary signs can only be used with numeric literals.")
-            return number if isinstance(node.op, ast.UAdd) else -number
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "set" and not node.args:
-            return set()
-        raise ValueError("Unsupported value in literal.")
-
-    return evaluate(expression)
+    return evaluate_expression(value, runtime)
 
 
 def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
@@ -142,6 +78,9 @@ def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
             return value.lower() == "true"
         if data is not None and isinstance(data["value"], bool):
             return data["value"]
+        result = evaluate_expression(value, runtime)
+        if isinstance(result, bool):
+            return result
         raise ValueError("Expected 'true', 'false', or a boolean variable.")
 
     if expected_type in ("list", "tuple", "set", "dict"):
@@ -177,10 +116,12 @@ def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
                     f"Variable '{value}' is type '{data['type']}', not '{expected_type}'."
                 )
             return data["value"]
-        try:
-            return TYPES[expected_type](value)
-        except (TypeError, ValueError) as error:
-            raise ValueError(f"'{value}' is not a valid {expected_type}.") from error
+        result = evaluate_expression(value, runtime)
+        if expected_type == "float" and isinstance(result, int) and not isinstance(result, bool):
+            return float(result)
+        if not isinstance(result, TYPES[expected_type]) or isinstance(result, bool):
+            raise TypeError(f"Expected a {expected_type} expression.")
+        return result
 
     if expected_type in ("file", "iterator") and data is not None:
         if data["type"] != expected_type:

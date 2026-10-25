@@ -693,6 +693,45 @@ class BuiltinCommandTests(unittest.TestCase):
         self.assertTrue(runtime.require_var("handle")["value"].closed)
         self.assertEqual(runtime.open_files, [])
 
+    def test_file_read_and_write_support_text_and_binary_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            text_path = Path(directory) / "text.txt"
+            binary_path = Path(directory) / "binary.bin"
+            escaped_text_path = str(text_path).replace("\\", "\\\\")
+            escaped_binary_path = str(binary_path).replace("\\", "\\\\")
+            text_output = io.StringIO()
+            text_program = (
+                f'open "{escaped_text_path}" "w" writer\n'
+                'file write writer "text payload"\n'
+                "close writer\n"
+                f'open "{escaped_text_path}" "r" reader\n'
+                'define var contents: string = ""\n'
+                "file read reader contents\n"
+                "close reader\n"
+                "text output contents\n"
+            )
+            with contextlib.redirect_stdout(text_output):
+                self.run_program(text_program)
+            self.assertEqual(text_path.read_text(encoding="utf-8"), "text payload")
+            self.assertEqual(text_output.getvalue(), "text payload\n")
+
+            binary_output = io.StringIO()
+            binary_program = (
+                'define var payload: bytes = "binary payload"\n'
+                f'open "{escaped_binary_path}" "wb" writer\n'
+                "file write writer payload\n"
+                "close writer\n"
+                f'open "{escaped_binary_path}" "rb" reader\n'
+                'define var contents: bytes = ""\n'
+                "file read reader contents\n"
+                "close reader\n"
+                "text output contents\n"
+            )
+            with contextlib.redirect_stdout(binary_output):
+                self.run_program(binary_program)
+            self.assertEqual(binary_path.read_bytes(), b"binary payload")
+            self.assertEqual(binary_output.getvalue(), "b'binary payload'\n")
+
     def test_invalid_chr_reports_runtime_error(self) -> None:
         output = io.StringIO()
         with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):

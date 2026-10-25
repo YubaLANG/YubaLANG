@@ -1,9 +1,9 @@
-import operator
 from typing import Any, Callable
 
 from . import arith, iteration, string_builtins, utilities
 from .collection_commands import execute_collection_command
 from .conversion import convert_value, parse_value
+from .expressions import evaluate_expression
 from .ffi import execute_ffi
 from .io_commands import execute_io_command
 from .runtime import RecordDefinition, RecordValue, Runtime, TYPES
@@ -15,27 +15,11 @@ def _assign(runtime: Runtime, name: str, value: Any) -> None:
     runtime.assign_var(name, value)
 
 
-def _comparison_value(value: str, runtime: Runtime) -> Any:
-    if runtime.get_var(value) is not None:
-        return runtime.require_var(value)["value"]
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-        return value[1:-1]
-    if value.lower() in ("true", "false"):
-        return value.lower() == "true"
-    if value.lower() == "none":
-        return None
-    try:
-        return float(value) if "." in value else int(value)
-    except ValueError:
-        return value
-
-
 def evaluate_condition(condition: str, runtime: Runtime) -> bool:
-    condition = condition.strip()
-    if condition.lower() in ("true", "false"):
-        return condition.lower() == "true"
-    variable = runtime.get_var(condition)
-    return bool(variable["value"]) if variable else False
+    value = evaluate_expression(condition, runtime)
+    if not isinstance(value, bool):
+        raise TypeError("Condition must evaluate to a boolean.")
+    return value
 
 
 def _builtin_callable(name: str, value: Any) -> Any:
@@ -71,6 +55,13 @@ def execute_command(
     source_name: str = "<memory>",
 ) -> None:
     command = parts[0]
+
+    if command == "set" and len(parts) >= 4 and parts[2] == "=":
+        name = parts[1]
+        if not name.isidentifier():
+            raise SyntaxError("Assignment target must be an identifier.")
+        _assign(runtime, name, evaluate_expression(" ".join(parts[3:]), runtime))
+        return
 
     if command == "ffi":
         execute_ffi(parts, runtime, source_name)
@@ -170,28 +161,25 @@ def execute_command(
         return
 
     if command == "compare":
-        if len(parts) != 5:
-            raise SyntaxError("Usage: compare <value1> <op> <value2> <dest_bool_var>")
-        operations = {
-            "==": operator.eq, "!=": operator.ne, "<": operator.lt,
-            ">": operator.gt, "<=": operator.le, ">=": operator.ge,
-        }
-        destination = runtime.require_var(parts[4])
+        if len(parts) < 4:
+            raise SyntaxError("Usage: compare <expression> <bool_variable>")
+        destination_name = parts[-1]
+        destination = runtime.require_var(destination_name)
         if destination["type"] != "bool":
-            raise TypeError(f"Destination variable '{parts[4]}' must be a defined boolean.")
-        if parts[2] not in operations:
-            raise SyntaxError(f"Unknown comparison operator: {parts[2]}")
-        result = operations[parts[2]](
-            _comparison_value(parts[1], runtime), _comparison_value(parts[3], runtime)
-        )
-        runtime.assign_var(parts[4], result)
+            raise TypeError(
+                f"Destination variable '{destination_name}' must be a defined boolean."
+            )
+        result = evaluate_expression(" ".join(parts[1:-1]), runtime)
+        if not isinstance(result, bool):
+            raise TypeError("Comparison expression must evaluate to a boolean.")
+        runtime.assign_var(destination_name, result)
         return
 
     if command in ("list", "dict", "set", "tuple"):
         execute_collection_command(parts, runtime)
         return
 
-    if command in ("text", "open", "close"):
+    if command in ("text", "open", "close", "file"):
         execute_io_command(parts, runtime)
         return
 

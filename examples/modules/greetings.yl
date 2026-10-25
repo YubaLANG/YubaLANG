@@ -1,0 +1,4 @@
+func define hello name
+    text output "Hello"
+    text output name
+endfunc

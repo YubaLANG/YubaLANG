@@ -1,159 +1,24 @@
-﻿# YubaLANG Example Programs
+# Runnable examples
 
-## hello.yl
+Each output-based example is checked against its paired `.expected.txt` file
+by the test suite. Run one with `YubaLANG test examples\<name>.yl` on Windows,
+or `YubaLANG test examples/<name>.yl` on macOS/Linux. The runner executes a
+program with its own directory as the working directory, so relative file
+paths in an example resolve from that directory.
 
-```hl
-text output "Hello, world!"
-```
+| Program | Demonstrates |
+| --- | --- |
+| [Getting started](../examples/getting-started.yl) | Variables, comparisons, conditionals, and functions. |
+| [Functions](../examples/functions.yl) | Function parameters, return values, and `filter`. |
+| [Collections](../examples/collections.yl) | Sorting, slicing, and aggregation. |
+| [Strings and iteration](../examples/strings_and_iteration.yl) | Unicode character helpers and `enumerate`. |
+| [File I/O](../examples/file_io.yl) | Opening, reading, and closing a text file. |
+| [Error handling](../examples/error_handling.yl) | `throw`, `catch`, and `finally`. |
+| [Modules](../examples/modules/main.yl) | Importing and calling a namespaced local module. |
+| [Testing](../examples/testing/smoke.yl) | A minimal output fixture for `YubaLANG test`. |
+| [C ABI](../examples/ffi_add.yl) | Calling a native C function. See the [C ABI guide](c-abi.md) to build the library for your platform. |
 
----
-
-## variables.yl
-
-```hl
-define var name: string = "YubaLANG"
-define var version: float = 1.0
-define var active: bool = true
-
-text output name
-text output version
-text output active
-```
-
----
-
-## calculator.yl
-
-```hl
-define var a: int = 20
-define var b: int = 5
-
-arith add a b
-arith sub a b
-arith mul a b
-arith div a b
-arith mod a b
-```
-
----
-
-## lists.yl
-
-```hl
-define var numbers: list = [10, 20, 30]
-
-list append numbers 40
-
-define var item: int = 0
-list get numbers 2 item
-
-text output item
-
-define var length: int = 0
-list len numbers length
-
-text output length
-
-arith sum numbers
-arith max numbers
-arith min numbers
-```
-
----
-
-## conditions.yl
-
-```hl
-define var score: int = 75
-define var passing: bool = false
-
-compare score >= 60 passing
-
-if passing
-    text output "Passing"
-else
-    text output "Not passing"
-endif
-```
-
----
-
-## functions.yl
-
-```hl
-func define greet
-    text output "Hello from YubaLANG!"
-endfunc
-
-func call greet
-```
-
----
-
-## loops.yl
-
-```hl
-loop for 5
-    text output "Loop iteration"
-endloop
-```
-
----
-
-## input.yl
-
-```hl
-define var name: string = ""
-
-text output "Enter your name:"
-text input name
-
-text output name
-```
-
----
-
-## conversion.yl
-
-```hl
-define var number: int = 42
-
-convert number to float
-text output number
-
-convert number to string
-text output number
-```
-
----
-
-## complete.yl
-
-```hl
-define var language: string = "YubaLANG"
-define var numbers: list = [10, 20, 30]
-
-text output "Language:"
-text output language
-
-text output "Numbers:"
-arith sum numbers
-
-define var largest: int = 0
-list get numbers 2 largest
-
-define var is_large: bool = false
-compare largest > 20 is_large
-
-if is_large
-    text output "The largest number is greater than 20."
-else
-    text output "The largest number is not greater than 20."
-endif
-
-func define finish
-    text output "Program finished."
-endfunc
-
-func call finish
-```
+Run the testing example with `YubaLANG test examples/testing`. The
+[multi-module project tutorial](project-tutorial.md) adds a local package
+dependency and runs an output test. Native interop needs a C compiler and
+platform-specific library names, as described in the C ABI guide.

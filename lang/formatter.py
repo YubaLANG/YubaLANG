@@ -1,7 +1,6 @@
 """Formatting utilities for YubaLANG source files."""
 
-import shlex
-
+from .syntax import tokenize_line
 
 class FormatError(ValueError):
     """Raised when source structure cannot be formatted safely."""
@@ -19,8 +18,8 @@ def format_source(source: str) -> str:
             continue
 
         try:
-            parts = shlex.split(content, posix=False, comments=True)
-        except ValueError as error:
+            parts = tokenize_line(content)
+        except SyntaxError as error:
             raise FormatError(f"line {line_number}: invalid command quoting: {error}") from error
 
         command = parts[0] if parts else ""
@@ -47,7 +46,7 @@ def format_source(source: str) -> str:
             blocks.append(("if", line_number))
         elif command == "func" and len(parts) >= 3 and parts[1] == "define":
             blocks.append(("func", line_number))
-        elif command == "loop" and len(parts) == 3 and parts[1] in ("for", "while"):
+        elif command == "loop" and len(parts) >= 3 and parts[1] in ("for", "while"):
             blocks.append(("loop", line_number))
         elif command == "try":
             blocks.append(("try", line_number))

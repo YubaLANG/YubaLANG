@@ -32,7 +32,7 @@ def write_package(root: Path, name: str, source: str) -> None:
                 "name": name,
                 "version": "0.1.0",
                 "entry": "main.yl",
-                "yubalang": "1.2",
+                "yubalang": "1.3",
                 "dependencies": {},
             }
         ),
@@ -52,6 +52,7 @@ class PackageManagerTests(unittest.TestCase):
             self.assertTrue((project / "main.yl").is_file())
             parsed = json.loads((project / "yuba.json").read_text(encoding="utf-8"))
             self.assertEqual(parsed["entry"], "main.yl")
+            self.assertEqual(parsed["yubalang"], "1.3")
 
     def test_project_run_uses_manifest_entry(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -125,9 +126,13 @@ class PackageManagerTests(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             incompatible = run_cli("package", "install", cwd=project)
             self.assertEqual(incompatible.returncode, 1)
-            self.assertIn("this runtime supports 1.2", incompatible.stderr)
+            self.assertIn("this runtime supports 1.2 and 1.3", incompatible.stderr)
 
             manifest["yubalang"] = "1.2"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            compatible = run_cli("package", "install", cwd=project)
+            self.assertEqual(compatible.returncode, 0, compatible.stderr)
+
             manifest["dependencies"] = {"missing": {"path": "../missing"}}
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             missing = run_cli("package", "install", cwd=project)

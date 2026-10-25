@@ -11,6 +11,7 @@ provide additional installation and operational detail.
 - [Running YubaLANG](#running-yubalang)
 - [Source syntax](#source-syntax)
 - [Lexical rules and evaluation](#lexical-rules-and-evaluation)
+- [Expressions and assignment](#expressions-and-assignment)
 - [Variables and types](#variables-and-types)
 - [Expressions and literals](#expressions-and-literals)
 - [Commands and built-ins](#commands-and-built-ins)
@@ -166,19 +167,34 @@ may not be diagnosed; runtime checks remain authoritative.
 
 ## Expressions and literals
 
-YubaLANG has command-oriented syntax rather than general expression
-statements. Values can be literals or variable names. Supported literals
-include numbers, strings, booleans, `none`, lists, dictionaries, sets, and
-tuples. Collection literals can refer to existing variables:
+Expression-bearing commands accept literals, variable names, collections,
+parentheses, arithmetic operators, comparisons, and boolean operators. The
+precedence and grammar are specified in the
+[YubaLANG 1.3 reference](1.3-docs.md#formal-grammar).
+
+`set <variable> = <expression>` assigns to an existing variable without
+changing its declared type:
+
+```hl
+define var base: int = 3
+define var result: int = 0
+set result = (base + 2) ** 2
+text output result
+```
+
+The expression subset is available in initializers, assignments, returns,
+output, comparisons, conditions, and loop counts/conditions. Other command
+arguments retain their documented forms. Values can be literals or variable
+names. Collection literals can refer to existing variables:
 
 ```hl
 define var first: int = 10
 define var values: list = [first, 20, "thirty"]
 ```
 
-Strings are quoted. Numeric signs are supported in numeric values. Boolean
-conditions in `if` and `loop while` use a boolean literal or variable.
-`compare` writes comparisons to a boolean destination.
+Strings are quoted. `if`, `elseif`, and `loop while` require boolean
+conditions. `compare <expression> <bool-destination>` stores a comparison
+result; the legacy four-operand comparison form is also supported.
 
 ## Commands and built-ins
 
@@ -273,6 +289,11 @@ given key; record attribute names may be unquoted.
 - `wait <seconds>` pauses for the specified duration.
 - `open <path> <mode> <file-destination>` opens a file. Text files use UTF-8;
   modes containing `b` open binary files.
+- `file read <file-variable> <destination>` reads the rest of an open file.
+  Text mode requires a `string` destination; binary mode requires `bytes` or
+  `bytearray`.
+- `file write <file-variable> <value>` writes a string to a text file or
+  bytes/bytearray to a binary file.
 - `close <file-variable>` closes an open file.
 
 Built-in unary functions accepted by `map` and `filter` include `abs`, `bool`,
@@ -536,7 +557,8 @@ trusted libraries. See the [C ABI guide](c-abi.md).
 - The C bridge is intentionally narrow and does not transfer pointers or
   ownership.
 
-For an introductory path, begin with the [language guide](1.2-docs.md), then
+For an introductory path, begin with the [getting-started guide](getting-started.md)
+and [documentation guide](index.md), then
 refer to [built-ins](builtins.md), [projects](package-manager.md),
 [formatting](formatter.md), [installation](install.md), and
 [examples](examples.md).

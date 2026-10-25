@@ -1,0 +1,7 @@
+try
+    throw "A sample failure"
+catch problem
+    text output problem
+finally
+    text output "Cleanup always runs."
+endtry

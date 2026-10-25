@@ -141,7 +141,7 @@ class RuntimeDiagnosticTests(unittest.TestCase):
     def test_command_tokenization_cache_reuses_immutable_results(self):
         _split_cached.cache_clear()
         with mock.patch(
-            "lang.interpreter.shlex.split",
+            "lang.syntax.shlex.split",
             return_value=["text", "output", "ok"],
         ) as split:
             first = _split_cached("text output ok")

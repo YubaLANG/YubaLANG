@@ -7,6 +7,7 @@ import sys
 from typing import Any, BinaryIO
 
 from .interpreter import _split
+from .expressions import parse_expression
 from .runtime import TYPES
 from .typecheck import check_types
 
@@ -16,7 +17,7 @@ _LEXEME = re.compile(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|#[^\r\n]*|[A-Za-z_
 _COMMANDS = {
     "all", "any", "arith", "ascii", "assert", "bool", "break", "bytearray", "bytes",
     "callable", "chr", "close", "compare", "continue", "convert", "define", "dict",
-    "enumerate", "ffi", "filter", "format", "func", "getattr", "hasattr", "if",
+    "enumerate", "ffi", "file", "filter", "format", "func", "getattr", "hasattr", "if",
     "id", "import", "iter", "len", "list", "loop", "map", "next", "open", "ord",
     "range", "record", "repr",
     "return", "reversed", "set", "setattr", "slice", "sorted", "text",
@@ -26,7 +27,7 @@ _COMMANDS = {
 _ARITY: dict[str, tuple[int, ...]] = {
     "all": (3,), "any": (3,), "ascii": (3,), "bool": (3,),
     "bytearray": (3,), "bytes": (3,), "callable": (3,), "chr": (3,),
-    "compare": (5,), "convert": (3, 4), "enumerate": (3, 4),
+    "convert": (3, 4), "enumerate": (3, 4),
     "filter": (4,), "format": (3, 4), "getattr": (4,), "hasattr": (4,),
     "id": (3,), "import": (2, 4),
     "iter": (3,), "len": (3,), "map": (4,), "next": (3, 4),
@@ -230,10 +231,15 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
         elif command == "throw" and len(parts) != 2:
             error = "Usage: throw <value>"
         elif command == "if":
-            if len(parts) != 2:
+            if len(parts) < 2:
                 error = "Usage: if <condition>"
             else:
-                blocks.append(("if", line_number))
+                try:
+                    parse_expression(" ".join(parts[1:]))
+                except SyntaxError as expression_error:
+                    error = str(expression_error)
+                else:
+                    blocks.append(("if", line_number))
         elif command == "func":
             if len(parts) >= 3 and parts[1] == "define":
                 function_name = parts[2]
@@ -276,17 +282,27 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
             elif len(parts) < 3 or parts[1] != "call":
                 error = "Usage: func define <name> [parameters] or func call <name> [arguments]"
         elif command == "loop":
-            if len(parts) != 3 or parts[1] not in ("for", "while"):
+            if len(parts) < 3 or parts[1] not in ("for", "while"):
                 error = "Usage: loop for <count> or loop while <condition>"
             else:
                 blocks.append(("loop", line_number))
+                if parts[1] == "while":
+                    try:
+                        parse_expression(" ".join(parts[2:]))
+                    except SyntaxError as expression_error:
+                        error = str(expression_error)
         elif command in ("elseif", "else", "endif", "endfunc", "endloop", "endtry"):
             expected = {"elseif": "if", "else": "if", "endif": "if",
                         "endfunc": "func", "endloop": "loop", "endtry": "try"}[command]
             if len(parts) != 1 and command != "elseif":
                 error = f"'{command}' does not take arguments."
-            elif command == "elseif" and len(parts) != 2:
+            elif command == "elseif" and len(parts) < 2:
                 error = "Usage: elseif <condition>"
+            elif command == "elseif":
+                try:
+                    parse_expression(" ".join(parts[1:]))
+                except SyntaxError as expression_error:
+                    error = str(expression_error)
             elif not blocks or blocks[-1][0] != expected:
                 error = f"Unexpected '{command}' without an open {expected} block."
             elif command in ("endif", "endfunc", "endloop", "endtry"):
@@ -305,10 +321,35 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
             elif parts[3] not in TYPES and parts[3] not in record_types:
                 code = "unknown-type"
                 error = f"Unknown type: {parts[3]}"
+        elif command == "compare":
+            if len(parts) < 4:
+                error = "Usage: compare <expression> <bool_variable>"
+            else:
+                try:
+                    parse_expression(" ".join(parts[1:-1]))
+                except SyntaxError as expression_error:
+                    error = str(expression_error)
+        elif command == "set" and len(parts) >= 2 and parts[1] not in ("add", "remove"):
+            if len(parts) < 4 or parts[2] != "=":
+                error = "Usage: set <variable> = <expression>"
+            elif not parts[1].isidentifier():
+                error = "Assignment target must be an identifier."
+            else:
+                try:
+                    parse_expression(" ".join(parts[3:]))
+                except SyntaxError as expression_error:
+                    error = str(expression_error)
         elif command == "assert" and len(parts) not in (2, 3):
             error = "Usage: assert <boolean> [message]"
         elif command == "close" and len(parts) != 2:
             error = "Usage: close <file_variable>"
+        elif command == "file" and (
+            len(parts) != 4 or parts[1] not in ("read", "write")
+        ):
+            error = (
+                "Usage: file read <file_variable> <destination> or "
+                "file write <file_variable> <value>"
+            )
         elif command == "record":
             if len(parts) < 3 or parts[1] not in ("define", "create"):
                 error = (

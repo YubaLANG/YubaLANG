@@ -4,8 +4,9 @@ A fast programming language with a hierarchical syntax built for modern programm
 ## Documentation
 
 * [Getting started](docs/getting-started.md)
+* [Documentation guide](docs/index.md)
 * [Master feature reference](docs/master-reference.md)
-* [YubaLANG 1.2 language reference](docs/1.2-docs.md)
+* [YubaLANG 1.3 language reference](docs/1.3-docs.md)
 * [Built-in function reference](docs/builtins.md)
 * [Language server and editor setup](docs/language-server.md)
 * [Formatting YubaLANG source files](docs/formatter.md)
@@ -14,6 +15,7 @@ A fast programming language with a hierarchical syntax built for modern programm
 * [Calling C functions](docs/c-abi.md)
 * [Runnable example programs](examples/)
 * [Runtime performance benchmarks](docs/performance.md)
+* [1.2 to 1.3 migration notes](docs/1.3-migration.md)
 
 New to YubaLANG? Follow the [getting-started guide](docs/getting-started.md)
 to create, check, and run a first program. From a source checkout, run

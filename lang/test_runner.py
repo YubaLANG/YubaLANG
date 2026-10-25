@@ -2,6 +2,7 @@
 
 import difflib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -52,6 +53,7 @@ def _run_case(program: Path) -> tuple[str, str, str, str]:
             text=True,
             encoding="utf-8",
             errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             timeout=TEST_TIMEOUT_SECONDS,
             check=False,
         )

@@ -1,0 +1,5 @@
+Sorted values:
+[2, 3, 5, 8]
+Middle values:
+[3, 5]
+18

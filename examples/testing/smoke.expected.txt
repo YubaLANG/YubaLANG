@@ -1,0 +1,1 @@
+YubaLANG output tests compare exact text.

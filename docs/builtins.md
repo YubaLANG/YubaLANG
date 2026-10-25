@@ -78,8 +78,14 @@ The interpreter also supports `all`, `any`, `bool`, `callable`, `id`, `len`,
 `type`, `vars`, `bin`, `divmod`, `hex`, `oct`, `pow`, `convert`, `bytes`,
 `bytearray`, `getattr`, `hasattr`, `setattr`, and `open`. Arithmetic commands
 use `arith <operation> <value>` or `arith <operation> <value1> <value2>`.
-Use `close <file_variable>` to close a file before the program ends; open files
-are also closed automatically when a file run finishes.
+
+`open <path> <mode> <file_variable>` opens a text or binary file.
+`file read <file_variable> <destination>` reads the remaining content:
+text-mode files require a `string` destination, binary-mode files require
+`bytes` or `bytearray`. `file write <file_variable> <value>` writes a string
+to a text file or bytes/bytearray to a binary file. Use
+`close <file_variable>` for deterministic closure; remaining open files are
+also closed when a file run finishes.
 
 Commands that write to a destination variable check the result against that
 variable's declared type. An integer result may be widened to a `float`

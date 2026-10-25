@@ -18,21 +18,24 @@ manifest has the following fields:
   "name": "sample",
   "version": "0.1.0",
   "entry": "main.yl",
-  "yubalang": "1.2",
+  "yubalang": "1.3",
   "dependencies": {}
 }
 ```
 
 `name`, `version`, `entry`, and `yubalang` are required strings. Dependencies
-are named packages whose source is either a relative path or a Git URL:
-the runtime currently accepts `"yubalang": "1.2"`.
+are named packages whose source is either a relative path or a Git URL.
+YubaLANG 1.3 accepts manifests targeting versions `1.2` and `1.3`; projects
+initialized by YubaLANG 1.3 target `"yubalang": "1.3"`. The current YubaPKG
+release documents compatibility with YubaLANG 1.2, so check its manifest
+reference before using a 1.3-targeted manifest with that tool.
 
 ```json
 {
   "name": "sample",
   "version": "0.1.0",
   "entry": "main.yl",
-  "yubalang": "1.2",
+  "yubalang": "1.3",
   "dependencies": {
     "local_math": { "path": "../local_math" },
     "text_utils": { "git": "https://github.com/example/text-utils.git" }

@@ -2,9 +2,9 @@
 
 import ast
 import re
-import shlex
 
 from .runtime import TYPES
+from .syntax import tokenize_line
 from .type_system import TypeSpec, format_type, is_known_type, parse_type
 
 
@@ -117,7 +117,75 @@ def _type_of(
         return variables[value]
     if functions and value in functions:
         return functions[value]
-    return _literal_type(value)
+    return _expression_type(value, variables, functions)
+
+
+def _expression_type(
+    source: str,
+    variables: dict[str, str | None],
+    functions: dict[str, str | None] | None,
+) -> str | None:
+    try:
+        expression = ast.parse(_normalize_literals(source), mode="eval").body
+    except SyntaxError:
+        return None
+
+    def infer(node: ast.expr) -> str | None:
+        if isinstance(node, ast.Constant):
+            return _python_type(node.value)
+        if isinstance(node, ast.Name):
+            return variables.get(node.id) or (functions or {}).get(node.id)
+        if isinstance(node, ast.List):
+            item_types = [infer(item) for item in node.elts]
+            merged = _merge_types([item for item in item_types if item])
+            return f"list[{merged}]" if merged else "list"
+        if isinstance(node, ast.Set):
+            item_types = [infer(item) for item in node.elts]
+            merged = _merge_types([item for item in item_types if item])
+            return f"set[{merged}]" if merged else "set"
+        if isinstance(node, ast.Tuple):
+            item_types = [infer(item) for item in node.elts]
+            return (
+                f"tuple[{', '.join(item_types)}]"
+                if item_types and all(item_types) else "tuple"
+            )
+        if isinstance(node, ast.Dict):
+            key_types = [infer(item) for item in node.keys if item is not None]
+            value_types = [infer(item) for item in node.values]
+            key_type = _merge_types([item for item in key_types if item])
+            value_type = _merge_types([item for item in value_types if item])
+            return (
+                f"dict[{key_type}, {value_type}]"
+                if key_type and value_type else "dict"
+            )
+        if isinstance(node, ast.UnaryOp):
+            operand = infer(node.operand)
+            if isinstance(node.op, ast.Not):
+                return "bool" if operand == "bool" else None
+            return operand if operand in ("int", "float") else None
+        if isinstance(node, ast.BinOp):
+            left, right = infer(node.left), infer(node.right)
+            if left not in ("int", "float") or right not in ("int", "float"):
+                return None
+            if isinstance(node.op, ast.Div) or "float" in (left, right):
+                return "float"
+            if (
+                isinstance(node.op, ast.Pow)
+                and isinstance(node.right, ast.UnaryOp)
+                and isinstance(node.right.op, ast.USub)
+            ):
+                return "float"
+            return "int"
+        if isinstance(node, (ast.BoolOp, ast.Compare)):
+            return "bool"
+        if (
+            isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "set" and not node.args and not node.keywords
+        ):
+            return "set"
+        return None
+
+    return infer(expression)
 
 
 def _compatible(actual: str | None, expected: str) -> bool:
@@ -181,8 +249,8 @@ def _result_type(
         return parts[2], "iterator"
     if command == "format" and len(parts) in (3, 4):
         return parts[-1], "string"
-    if command == "compare" and len(parts) == 5:
-        return parts[4], "bool"
+    if command == "compare" and len(parts) >= 4:
+        return parts[-1], _type_of(" ".join(parts[1:-1]), variables, functions)
     if command == "text" and len(parts) == 3 and parts[1] == "input":
         return parts[2], "string"
     if command == "list" and len(parts) == 4 and parts[1] == "len":
@@ -223,8 +291,8 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
         if not stripped or stripped.startswith("#"):
             continue
         try:
-            parts = shlex.split(stripped, posix=False, comments=True)
-        except ValueError:
+            parts = list(tokenize_line(stripped))
+        except SyntaxError:
             continue
         if not parts:
             continue
@@ -377,6 +445,33 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                         f"Type mismatch: assert message has type '{message_type}', "
                         "expected 'string'.",
                     ))
+            continue
+        if parts[0] in ("if", "elseif") and len(parts) > 1:
+            actual = _type_of(" ".join(parts[1:]), variables, function_types)
+            if actual is not None and actual != "bool":
+                diagnostics.append((
+                    line_number,
+                    f"Type mismatch: condition has type '{actual}', expected 'bool'.",
+                ))
+        if (
+            parts[0] == "loop" and len(parts) > 2 and parts[1] == "while"
+        ):
+            actual = _type_of(" ".join(parts[2:]), variables, function_types)
+            if actual is not None and actual != "bool":
+                diagnostics.append((
+                    line_number,
+                    f"Type mismatch: loop condition has type '{actual}', expected 'bool'.",
+                ))
+        if parts[0] == "set" and len(parts) >= 4 and parts[2] == "=":
+            destination = parts[1]
+            expected = variables.get(destination)
+            actual = _type_of(" ".join(parts[3:]), variables, function_types)
+            if actual is not None and expected is not None and not _compatible(actual, expected):
+                diagnostics.append((
+                    line_number,
+                    f"Type mismatch: assignment has type '{actual}' but variable "
+                    f"'{destination}' has type '{expected}'.",
+                ))
             continue
         if parts[0] == "return" and function_returns:
             expected = function_returns[-1]

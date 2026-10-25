@@ -1,6 +1,5 @@
 ﻿"""Source loading and control-flow execution for YubaLANG."""
 
-import shlex
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -8,6 +7,7 @@ from typing import Any
 
 from .commands import evaluate_condition, execute_command
 from .diagnostics import format_diagnostic
+from .expressions import evaluate_expression
 from .packages import (
     PackageError,
     find_project_root,
@@ -24,6 +24,7 @@ from .runtime import (
     UserFunction,
 )
 from .string_builtins import resolve
+from .syntax import parse_line, tokenize_line
 from .type_system import FunctionReference, format_type, parse_type
 
 
@@ -59,10 +60,7 @@ class RuntimeErrorSignal(Exception):
 
 @lru_cache(maxsize=4096)
 def _split_cached(line: str) -> tuple[str, ...]:
-    try:
-        return tuple(shlex.split(line, posix=False, comments=True))
-    except ValueError as error:
-        raise SyntaxError(f"Invalid command quoting: {error}") from error
+    return tokenize_line(line)
 
 
 def _split(line: str) -> list[str]:
@@ -459,11 +457,15 @@ def execute_lines(
             continue
 
         try:
+            node = parse_line(source_line, source_name, statement_line)
+            parts = list(node.tokens) if node is not None else []
             runtime.current_location = (source_name, statement_line)
-            parts = _split(raw_line)
             command = parts[0] if parts else ""
             if command == "return":
-                value = resolve(" ".join(parts[1:]), runtime) if len(parts) > 1 else None
+                value = (
+                    evaluate_expression(" ".join(parts[1:]), runtime)
+                    if len(parts) > 1 else None
+                )
                 raise ReturnException(value, has_value=len(parts) > 1)
             if command == "break":
                 raise BreakException()
@@ -484,10 +486,10 @@ def execute_lines(
                 continue
 
             if command == "if":
-                if len(parts) != 2:
+                if len(parts) < 2:
                     raise SyntaxError("Usage: if <condition>")
                 branches: list[tuple[str, list[str], list[int]]] = [
-                    (parts[1], [], [])
+                    (" ".join(parts[1:]), [], [])
                 ]
                 depth = 1
                 index += 1
@@ -513,14 +515,14 @@ def execute_lines(
                         branches[-1][1].append(nested_source_line)
                         branches[-1][2].append(line_numbers[index])
                     elif depth == 1 and nested_command == "elseif":
-                        if len(nested_parts) != 2:
+                        if len(nested_parts) < 2:
                             error = SyntaxError("Usage: elseif <condition>")
                             print(format_diagnostic(
                                 error, source_name, line_numbers[index],
                                 nested_source_line, runtime,
                             ))
                             raise SystemExit(1) from error
-                        branches.append((nested_parts[1], [], []))
+                        branches.append((" ".join(nested_parts[1:]), [], []))
                     elif depth == 1 and nested_command == "else":
                         branches.append(("true", [], []))
                     else:
@@ -633,8 +635,8 @@ def execute_lines(
             elif command == "import":
                 _execute_import(parts, runtime, source_name)
 
-            elif command == "loop" and len(parts) == 3 and parts[1] in ("for", "while"):
-                loop_type, condition = parts[1], parts[2]
+            elif command == "loop" and len(parts) >= 3 and parts[1] in ("for", "while"):
+                loop_type, condition = parts[1], " ".join(parts[2:])
                 body = []
                 body_line_numbers = []
                 index += 1
@@ -645,8 +647,9 @@ def execute_lines(
                 if index == len(lines):
                     raise SyntaxError("Missing endloop for loop.")
                 if loop_type == "for":
-                    value = runtime.get_var(condition)
-                    count = value["value"] if value else int(condition)
+                    count = evaluate_expression(condition, runtime)
+                    if not isinstance(count, int) or isinstance(count, bool):
+                        raise TypeError("loop for count must evaluate to an integer.")
                     for _ in range(count):
                         try:
                             execute_lines(

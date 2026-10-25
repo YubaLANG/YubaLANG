@@ -58,6 +58,26 @@ class FormatterTests(unittest.TestCase):
             '    text output "done"\nendtry\n',
         )
 
+    def test_formats_expression_conditions_and_loop_blocks(self):
+        self.assertEqual(
+            format_source(
+                "define var count: int = 1\n"
+                "if count + 1 > 1 and not false\n"
+                "text output count * 2\n"
+                "endif\n"
+                "loop for count + 1\n"
+                "text output count\n"
+                "endloop\n"
+            ),
+            "define var count: int = 1\n"
+            "if count + 1 > 1 and not false\n"
+            "    text output count * 2\n"
+            "endif\n"
+            "loop for count + 1\n"
+            "    text output count\n"
+            "endloop\n",
+        )
+
     def test_check_accepts_windows_line_endings(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "sample.yl"

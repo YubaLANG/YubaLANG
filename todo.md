@@ -29,24 +29,24 @@ programs and imports installed packages.
 
 ## P0 - Language correctness and specification
 
-- [ ] Publish a versioned 1.3 language reference that defines current
+- [x] Publish a versioned 1.3 language reference that defines current
   behavior precisely, including syntax, evaluation order, scoping, types,
   errors, imports, and compatibility guarantees.
-- [ ] Define a formal grammar for commands, blocks, function definitions,
+- [x] Define a formal grammar for commands, blocks, function definitions,
   literals, identifiers, comments, and line continuation before adding
   syntax that could conflict with existing programs.
-- [ ] Replace scattered parsing and token splitting with a shared tokenizer
+- [x] Replace scattered parsing and token splitting with a shared tokenizer
   and parser that produce source-located syntax nodes; preserve 1.2 behavior
   with compatibility tests.
-- [ ] Define expression precedence and associativity, then add consistent
+- [x] Define expression precedence and associativity, then add consistent
   parenthesized expressions, unary operators, arithmetic, comparisons, and
   boolean operators.
-- [ ] Add expression-level assignment and return values without changing
+- [x] Add expression-level assignment and return values without changing
   existing command forms unexpectedly.
-- [ ] Specify integer, floating-point, string, boolean, null/none, and
+- [x] Specify integer, floating-point, string, boolean, null/none, and
   collection semantics, including overflow, equality, truthiness, and
   conversion rules.
-- [ ] Specify variable declaration, reassignment, shadowing, function
+- [x] Specify variable declaration, reassignment, shadowing, function
   parameters, and module scope consistently.
 - [ ] Turn every documented syntax rule and built-in into executable
   conformance tests with clear negative cases.
@@ -172,18 +172,18 @@ programs and imports installed packages.
 
 ## P1 - Documentation and onboarding
 
-- [ ] Restructure documentation into a beginner path, language reference,
+- [x] Restructure documentation into a beginner path, language reference,
   standard-library reference, project guide, and advanced interoperability
   guides.
 - [ ] Add a tutorial that builds and tests a small multi-module project and
   adds a registry dependency through YubaPKG.
-- [ ] Add runnable examples for functions, collections, file I/O, error
+- [x] Add runnable examples for functions, collections, file I/O, error
   handling, modules, testing, and native interop.
-- [ ] Document supported Python/runtime platforms, architectures,
+- [x] Document supported Python/runtime platforms, architectures,
   prerequisites, and known limitations.
-- [ ] Document deprecations and migration steps for each language/runtime
+- [x] Document deprecations and migration steps for each language/runtime
   release.
-- [ ] Ensure documentation examples are checked in CI or exercised by tests.
+- [x] Ensure documentation examples are checked in CI or exercised by tests.
 
 ## P0 - 1.3.0 quality and release
 

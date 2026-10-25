@@ -68,7 +68,7 @@ kept under test with its expected output.
 
 - Try the interactive interpreter with `YubaLANG repl` (or
   `py -3 YubaLANG.py repl` from the checkout); enter `exit` to leave.
-- Browse the [language reference](1.2-docs.md) for commands, types, and
+- Browse the [language reference](1.3-docs.md) for commands, types, and
   control flow.
 - Use the [examples](../examples/) as complete programs.
 - For a project with imports and dependencies, see the

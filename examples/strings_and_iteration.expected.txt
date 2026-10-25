@@ -1,0 +1,6 @@
+Character:
+☃
+Code point:
+9731
+One-based positions:
+[(1, 4), (2, 1), (3, 3), (4, 2)]

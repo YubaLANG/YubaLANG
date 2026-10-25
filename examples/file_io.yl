@@ -1,0 +1,6 @@
+# Run this example from the examples directory.
+define var message: string = ""
+open "fixtures/message.txt" "r" input_file
+file read input_file message
+close input_file
+text output message
