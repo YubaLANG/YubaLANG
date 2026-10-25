@@ -2,6 +2,12 @@
 
 YubaLANG projects use a dependency-free JSON manifest named `yuba.json` and a
 generated `yuba.lock.json`. Both files should be checked into version control.
+YubaLANG 1.3 accepts manifests targeting runtime 1.2 or 1.3. The package
+interface uses lockfile format version 2; package tools must preserve the
+declared sources and the complete nested graph in that format. The current
+external YubaPKG release documents YubaLANG 1.2 manifest compatibility; its
+support for lockfile format 2 should be verified before using it to manage a
+YubaLANG 1.3 project.
 
 ## Create a project
 
@@ -69,22 +75,33 @@ YubaLANG package check
 YubaLANG package remove text_utils
 ```
 
-`add` and `remove` update the manifest and lockfile. `install` preserves
-previously locked Git revisions when the manifest source is unchanged; for a
-new Git dependency it resolves the default branch head. Git dependencies are
-cloned under `.yuba/packages/<name>` and checked out at the locked commit.
-`update` refreshes Git revisions (or only the named dependency), except where
-the manifest explicitly pins `rev`. Path dependencies always point at the
-current contents of the specified directory. Removing a Git dependency updates
-the manifest and lockfile; its unused checkout may remain in `.yuba/packages`.
+`add` and `remove` update the manifest and lockfile. `install` recursively
+locks dependencies declared by dependencies, preserving previously locked Git
+revisions when sources are unchanged. A new Git dependency resolves its
+requested revision or the default branch head. Git dependencies are cloned
+under `.yuba/packages/<name>` relative to the manifest that declares them and
+checked out at the locked commit. `update` refreshes Git revisions (or only the
+named direct dependency), except where the manifest explicitly pins `rev`.
+Path dependencies always point at the current contents of the specified
+directory. Removing a Git dependency updates the manifest and lockfile; its
+unused checkout may remain in `.yuba/packages`.
 
-The lockfile is deterministic JSON. It records each dependency source and, for
-Git sources, the resolved commit ID. `package check` verifies that the
-manifest and lockfile agree, path dependencies exist, and cached Git checkouts
-are at their locked revisions; it does not contact Git remotes or modify
-files. Run `package install` after editing a manifest. Git must be installed
-and the selected Git source must be reachable when adding or installing a
-dependency.
+Lockfile format 2 is deterministic JSON. Every dependency entry records its
+source, resolved path or Git commit, package identity (`name`, `version`,
+`entry`, and `yubalang`), and a nested `dependencies` object containing that
+package's complete locked dependency graph. The same graph is written to each
+dependency's own lockfile so imports from that package can resolve
+dependencies relative to its manifest. Path dependencies remain live
+directories and are not content-addressed; their location and declared
+identity are locked, while local source changes remain visible. Git packages
+are pinned to their exact commit. `package check` verifies manifests, nested
+lockfiles, package identities and entry files, and locked Git checkouts,
+including modified tracked files and untracked source files (excluding the
+manager's generated lockfile and nested cache). It does not contact Git
+remotes or modify files. Run `package install` after changing a manifest or
+moving a path dependency. A format-1 lockfile must be regenerated with
+`package install`. Git must be installed and reachable when installing a new
+or updated Git dependency.
 
 ## Import modules
 
@@ -100,12 +117,16 @@ func call math.add 20 22 -> answer
 text output answer
 ```
 
-For a local import, `helpers` resolves to `helpers.yl` or `helpers/main.yl`
-beside the importing file. Dotted imports follow directories, for example
-`import tools.math` resolves to `tools/math.yl` or
-`tools/math/main.yl`; without an explicit alias its namespace is `math`. For a
-dependency import, the package manifest's `entry` is used. Imports are loaded
-once per run. A cycle is an error.
+For an import, a dependency declared in the nearest package manifest takes
+precedence over a local file with the same first name. Otherwise, `helpers`
+resolves to `helpers.yl` or `helpers/main.yl` beside the importing file.
+Dotted imports follow directories, for example `import tools.math` resolves
+to `tools/math.yl` or `tools/math/main.yl`; without an explicit alias its
+namespace is `math`. For a package import, the manifest's `entry` is used.
+Dependencies of imported packages resolve from that package's own manifest
+and locked graph, including transitive path and Git packages. Imports are
+loaded once per run. Dependency cycles are reported during installation or
+validation; module-import cycles are errors at runtime.
 
 All functions declared in a module are available through its namespace;
 `func call namespace.function` is the call form. A function can call another
@@ -115,10 +136,11 @@ interpreter's shared global scope. Use function-local variables for library
 implementation details. An `as` alias must be a valid identifier.
 
 Missing modules and package/lockfile problems are reported with an actionable
-source diagnostic or package-manager error. Importing a module executes its
-top-level commands. Imported code runs with the program's privileges; YubaLANG
-does not sandbox modules or dependencies, so only use source code from packages
-you trust. YubaLANG
-currently supports direct path and Git dependencies only; it does not have a
-public package registry, version-range solver, or transitive dependency
-resolver.
+source diagnostic or package-manager error. Runtime imports use the checked
+lock graph and do not access the network; run `package install` beforehand.
+Within one runtime, rebinding a namespace to a different module is an error.
+Importing a module executes its top-level commands. Imported code runs with
+the program's privileges; YubaLANG does not sandbox modules or dependencies,
+so only use source code from packages you trust. The package tools support
+direct path and Git sources, including recursively declared dependency
+graphs; there is not yet a public registry or semantic-version range solver.

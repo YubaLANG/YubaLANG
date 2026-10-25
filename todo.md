@@ -9,17 +9,17 @@ programs and imports installed packages.
 
 ## P0 - 1.3.0 package-manager integration
 
-- [ ] Specify and version the interface between YubaLANG and YubaPKG:
+- [x] Specify and version the interface between YubaLANG and YubaPKG:
   manifest compatibility, lockfile format, installed-package layout, and
   runtime version requirements.
-- [ ] Make project imports consume the complete locked dependency graph,
+- [x] Make project imports consume the complete locked dependency graph,
   including transitive packages, without contacting the network.
-- [ ] Ensure imports resolve to the exact package versions and locations in
+- [x] Ensure imports resolve to the exact package versions and locations in
   the lockfile; report missing, modified, or inconsistent installations
   with actionable diagnostics.
 - [ ] Preserve local module, path dependency, and Git dependency behavior
   while introducing registry-installed packages.
-- [ ] Define deterministic import precedence, package namespace rules,
+- [x] Define deterministic import precedence, package namespace rules,
   duplicate-name behavior, and cycle diagnostics across dependency graphs.
 - [ ] Add cross-repository tests that use YubaPKG to install a package graph,
   then run imports with YubaLANG both online and offline.

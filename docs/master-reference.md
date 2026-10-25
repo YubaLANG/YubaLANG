@@ -453,8 +453,11 @@ through their module namespace, and module variables share the runtime's
 global scope.
 
 Projects use `yuba.json` and `yuba.lock.json`. Dependencies may refer to local
-paths or Git sources with an optional revision. The lockfile records resolved
-Git commits. Commands include:
+paths or Git sources with an optional revision. Lockfile format 2 records
+resolved Git commits and each package's nested dependency graph. Imports resolve
+dependencies from the nearest package manifest; declared dependencies take
+precedence over local modules with the same name. Runtime imports validate the
+locked graph without network access. Commands include:
 
 ```text
 YubaLANG package init [directory]
@@ -468,10 +471,10 @@ YubaLANG package remove <name>
 ```
 
 `YubaLANG run [project-directory]` runs the manifest entry point and checks
-installed dependencies when the project declares them. The package manager
-currently supports direct path and Git dependencies; it does not provide a
-registry or transitive dependency solver. Imported modules execute with the
-program's privileges; dependencies are not sandboxed. See the
+installed dependencies when the project declares them. The package tools
+support recursive path and Git dependencies, but not a public registry or
+semantic-version range solver. Imported modules execute with the program's
+privileges; dependencies are not sandboxed. See the
 [package guide](package-manager.md).
 
 ## Developer tools

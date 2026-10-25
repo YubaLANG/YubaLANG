@@ -109,6 +109,95 @@ class PackageManagerTests(unittest.TestCase):
             )
             self.assertEqual(updated_manifest["dependencies"], {})
 
+    def test_reports_dependency_cycles_during_install(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            library = root / "library"
+            write_package(project, "app", "")
+            write_package(library, "library", "")
+            project_manifest = json.loads(
+                (project / "yuba.json").read_text(encoding="utf-8")
+            )
+            project_manifest["dependencies"] = {"library": {"path": "../library"}}
+            (project / "yuba.json").write_text(
+                json.dumps(project_manifest), encoding="utf-8"
+            )
+            library_manifest = json.loads(
+                (library / "yuba.json").read_text(encoding="utf-8")
+            )
+            library_manifest["dependencies"] = {"app": {"path": "../project"}}
+            (library / "yuba.json").write_text(
+                json.dumps(library_manifest), encoding="utf-8"
+            )
+
+            installed = run_cli("package", "install", cwd=project)
+
+        self.assertEqual(installed.returncode, 1)
+        self.assertIn("Dependency cycle detected: app -> library -> app", installed.stderr)
+
+    def test_installs_and_imports_transitive_path_dependencies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            first = root / "first"
+            second = root / "second"
+            write_package(
+                second,
+                "second",
+                "func define answer\n    return 42\nendfunc\n",
+            )
+            write_package(
+                first,
+                "first",
+                "import second\n"
+                "func define answer\n"
+                "    define var result: int = 0\n"
+                "    func call second.answer -> result\n"
+                "    return result\n"
+                "endfunc\n",
+            )
+            manifest_path = first / "yuba.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["dependencies"] = {"second": {"path": "../second"}}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            write_package(
+                project,
+                "app",
+                "import first\n"
+                "define var result: int = 0\n"
+                "func call first.answer -> result\n"
+                "text output result\n",
+            )
+            manifest_path = project / "yuba.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["dependencies"] = {"first": {"path": "../first"}}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            (project / "first.yl").write_text(
+                "func define answer\n    return 99\nendfunc\n",
+                encoding="utf-8",
+            )
+
+            installed = run_cli("package", "install", cwd=project)
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            self.assertTrue((first / "yuba.lock.json").is_file())
+            self.assertTrue((project / "yuba.lock.json").is_file())
+            lock = json.loads(
+                (project / "yuba.lock.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(lock["lock_version"], 2)
+            self.assertIn(
+                "second",
+                lock["dependencies"]["first"]["dependencies"],
+            )
+
+            checked = run_cli("package", "check", cwd=project)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+            executed = run_cli(project / "main.yl", cwd=project)
+
+        self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
+        self.assertEqual(executed.stdout, "42\n")
+
     def test_reports_malformed_manifest_and_unavailable_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -155,6 +244,31 @@ class PackageManagerTests(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             with self.assertRaisesRegex(PackageError, "do not match the lockfile"):
+                check(project)
+
+    def test_check_reports_changed_package_version(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dependency = root / "library"
+            write_package(dependency, "library", "")
+            project = root / "project"
+            write_package(project, "app", "")
+            manifest_path = project / "yuba.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["dependencies"] = {"library": {"path": "../library"}}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            install(project)
+
+            dependency_manifest_path = dependency / "yuba.json"
+            dependency_manifest = json.loads(
+                dependency_manifest_path.read_text(encoding="utf-8")
+            )
+            dependency_manifest["version"] = "0.2.0"
+            dependency_manifest_path.write_text(
+                json.dumps(dependency_manifest), encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(PackageError, "metadata differs from the lockfile"):
                 check(project)
 
     @unittest.skipUnless(shutil.which("git"), "Git is not installed")
@@ -213,6 +327,22 @@ class PackageManagerTests(unittest.TestCase):
             executed = run_cli(project / "main.yl", cwd=project)
             self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
             self.assertEqual(executed.stdout, "42\n")
+
+            cached_entry = project / ".yuba" / "packages" / "gitlib" / "main.yl"
+            original_entry = cached_entry.read_text(encoding="utf-8")
+            cached_entry.write_text(original_entry + "\n", encoding="utf-8")
+            modified = run_cli("package", "check", cwd=project)
+            self.assertEqual(modified.returncode, 1)
+            self.assertIn("modified files", modified.stderr)
+            cached_entry.write_text(original_entry, encoding="utf-8")
+            untracked_file = (
+                project / ".yuba" / "packages" / "gitlib" / "injected.yl"
+            )
+            untracked_file.write_text("", encoding="utf-8")
+            untracked = run_cli("package", "check", cwd=project)
+            self.assertEqual(untracked.returncode, 1)
+            self.assertIn("modified files", untracked.stderr)
+            untracked_file.unlink()
 
             (work / "main.yl").write_text(
                 "func define answer\n    return 43\nendfunc\n",

@@ -1,21 +1,22 @@
 # Multi-module project tutorial
 
 This tutorial builds and tests a project with a local package dependency. It
-uses the currently supported path-dependency workflow. The public YubaPKG
-registry and registry dependencies are not available yet.
+uses the YubaLANG 1.3 package interface, including lockfile format 2. The
+external YubaPKG release documents YubaLANG 1.2 manifest compatibility, but
+its support for lockfile format 2 must be confirmed before managing this
+project with that tool.
 
 ## Create the library and app
 
-Install YubaPKG from its [repository](https://github.com/YubaLANG/YubaPKG),
-then from an empty working directory create a library and app project:
+From an empty working directory create a library and app project:
 
 ```text
-yubapkg package init hello_library
-yubapkg package init hello_app
+YubaLANG package init hello_library
+YubaLANG package init hello_app
 ```
 
-The current YubaPKG release creates manifests targeting YubaLANG 1.2, which
-remains accepted by the YubaLANG 1.3 runtime.
+YubaLANG 1.3 creates manifests targeting runtime 1.3. Manifests targeting
+runtime 1.2 are also accepted.
 
 Replace `hello_library/main.yl` with:
 
@@ -38,9 +39,9 @@ func call hello_library.greet "Ada"
 From the app directory, add the library as a local path dependency:
 
 ```text
-yubapkg package add hello_library --path ../hello_library
-yubapkg package install
-yubapkg package check
+YubaLANG package add hello_library --path ../hello_library
+YubaLANG package install
+YubaLANG package check
 ```
 
 The dependency key must match the library manifest's `name`. The lockfile
@@ -73,6 +74,5 @@ Ada
 Then run `YubaLANG test tests/cases`. The runner compares exact standard
 output, including line breaks.
 
-Registry installation, semantic-version selection, and transitive dependency
-solving are not implemented in YubaPKG yet. Use direct path or Git sources
-until its registry support is released.
+YubaLANG recursively locks path and Git dependencies declared by packages.
+Registry installation and semantic-version range selection are not supported.

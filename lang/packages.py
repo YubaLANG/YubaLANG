@@ -10,7 +10,7 @@ from typing import Any
 
 MANIFEST_NAME = "yuba.json"
 LOCK_NAME = "yuba.lock.json"
-LOCK_VERSION = 1
+LOCK_VERSION = 2
 SUPPORTED_YUBALANG = "1.3"
 COMPATIBLE_YUBALANG_VERSIONS = {"1.2", SUPPORTED_YUBALANG}
 PACKAGE_CACHE = Path(".yuba") / "packages"
@@ -232,14 +232,32 @@ def _install_git(root: Path, name: str, url: str, revision: str) -> Path:
 
 
 def install(root: Path, update: bool | set[str] = False) -> dict[str, Any]:
+    return _install(root.resolve(), update, [])
+
+
+def _install(
+    root: Path,
+    update: bool | set[str],
+    package_stack: list[str],
+    locked_dependencies: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     manifest = read_manifest(root)
+    package_name = manifest["name"]
+    if package_name in package_stack:
+        cycle = " -> ".join((*package_stack, package_name))
+        raise PackageError(f"Dependency cycle detected: {cycle}.")
+    package_stack = [*package_stack, package_name]
     dependencies = manifest["dependencies"]
     old_lock_path = root / LOCK_NAME
     try:
         old_lock = json.loads(old_lock_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         old_lock = {}
-    old_dependencies = old_lock.get("dependencies", {})
+    old_dependencies = (
+        locked_dependencies
+        if locked_dependencies is not None
+        else old_lock.get("dependencies", {})
+    )
     if not isinstance(old_dependencies, dict):
         old_dependencies = {}
 
@@ -268,6 +286,19 @@ def install(root: Path, update: bool | set[str] = False) -> dict[str, Any]:
                 f"'{dependency_manifest['name']}' at {dependency_root}."
             )
         resolve_entry(dependency_root, dependency_manifest)
+        entry["package"] = {
+            field: dependency_manifest[field]
+            for field in ("name", "version", "entry", "yubalang")
+        }
+        dependency_lock = _install(
+            dependency_root,
+            False,
+            package_stack,
+            entry.get("dependencies")
+            if isinstance(entry.get("dependencies"), dict)
+            else None,
+        )
+        entry["dependencies"] = dependency_lock["dependencies"]
 
     lock = {"lock_version": LOCK_VERSION, "dependencies": locked}
     _write_json(root / LOCK_NAME, lock)
@@ -275,10 +306,31 @@ def install(root: Path, update: bool | set[str] = False) -> dict[str, Any]:
 
 
 def check(root: Path) -> None:
+    _check(root.resolve(), [])
+
+
+def _check(
+    root: Path,
+    package_stack: list[str],
+    expected_dependencies: dict[str, Any] | None = None,
+) -> None:
     manifest = read_manifest(root)
+    package_name = manifest["name"]
+    if package_name in package_stack:
+        cycle = " -> ".join((*package_stack, package_name))
+        raise PackageError(f"Dependency cycle detected: {cycle}.")
+    package_stack = [*package_stack, package_name]
     lock = read_lockfile(root)
     manifest_dependencies = manifest["dependencies"]
     locked_dependencies = lock["dependencies"]
+    if (
+        expected_dependencies is not None
+        and locked_dependencies != expected_dependencies
+    ):
+        raise PackageError(
+            f"Dependency graph for package '{package_name}' differs from the "
+            "root lockfile; run 'YubaLANG package install'."
+        )
     if set(manifest_dependencies) != set(locked_dependencies):
         raise PackageError(
             "Manifest dependencies do not match the lockfile; run "
@@ -289,6 +341,18 @@ def check(root: Path) -> None:
         if not isinstance(entry, dict) or entry.get("source") != source:
             raise PackageError(
                 f"Dependency '{name}' differs from the lockfile; "
+                "run 'YubaLANG package install'."
+            )
+        package = entry.get("package")
+        if not isinstance(package, dict):
+            raise PackageError(
+                f"Lockfile entry for '{name}' has no package identity; "
+                "run 'YubaLANG package install'."
+            )
+        nested_dependencies = entry.get("dependencies")
+        if not isinstance(nested_dependencies, dict):
+            raise PackageError(
+                f"Lockfile entry for '{name}' has no locked dependency graph; "
                 "run 'YubaLANG package install'."
             )
         resolved = entry.get("resolved")
@@ -325,13 +389,42 @@ def check(root: Path) -> None:
                     f"Installed Git dependency '{name}' has origin '{origin}', "
                     f"not '{source['git']}'."
                 )
+            status = _git(
+                dependency_root,
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+                "--",
+                ".",
+                ":!.yuba",
+            )
+            changes = [
+                line
+                for line in status.splitlines()
+                if not (line.startswith("?? ") and line[3:] == LOCK_NAME)
+            ]
+            if changes:
+                raise PackageError(
+                    f"Installed Git dependency '{name}' has modified files; "
+                    "run 'YubaLANG package install' to restore the locked revision."
+                )
         dependency_manifest = read_manifest(dependency_root)
         if dependency_manifest["name"] != name:
             raise PackageError(
                 f"Dependency '{name}' points to package "
                 f"'{dependency_manifest['name']}' at {dependency_root}."
             )
+        expected_package = {
+            field: dependency_manifest[field]
+            for field in ("name", "version", "entry", "yubalang")
+        }
+        if package != expected_package:
+            raise PackageError(
+                f"Package '{name}' metadata differs from the lockfile; "
+                "run 'YubaLANG package install'."
+            )
         resolve_entry(dependency_root, dependency_manifest)
+        _check(dependency_root, package_stack, nested_dependencies)
 
 
 def _parse_add(args: list[str]) -> tuple[str, dict[str, str]]:

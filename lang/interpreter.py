@@ -259,11 +259,21 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
 
 def _module_file(module_name: str, runtime: Runtime, source_name: str) -> Path:
     parts = module_name.split(".")
+    if source_name == "<memory>":
+        package_root = runtime.project_root
+    else:
+        source_path = Path(source_name).resolve()
+        package_root = find_project_root(source_path)
+        if runtime.project_root is None:
+            runtime.project_root = package_root
+    if package_root is None:
+        package_root = runtime.project_root
+
     if (
-        runtime.project_root is not None
-        and parts[0] in read_manifest(runtime.project_root)["dependencies"]
+        package_root is not None
+        and parts[0] in read_manifest(package_root)["dependencies"]
     ):
-        dependency_root = resolve_dependency(runtime.project_root, parts[0])
+        dependency_root = resolve_dependency(package_root, parts[0])
         if dependency_root is None:
             raise PackageError(f"Dependency '{parts[0]}' could not be resolved.")
         if len(parts) == 1:
@@ -274,10 +284,7 @@ def _module_file(module_name: str, runtime: Runtime, source_name: str) -> Path:
         if source_name == "<memory>":
             base_directory = Path.cwd()
         else:
-            source_path = Path(source_name).resolve()
             base_directory = source_path.parent
-            if runtime.project_root is None:
-                runtime.project_root = find_project_root(source_path)
         base = base_directory.joinpath(*parts)
 
     candidates = (base.with_suffix(".yl"), base / "main.yl")
