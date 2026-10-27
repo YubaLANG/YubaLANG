@@ -51,7 +51,10 @@ def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
     if spec.arguments:
         if data is not None:
             candidate = data["value"]
-            if spec.name in ("list", "dict", "set", "tuple"):
+            if (
+                spec.name in ("list", "dict", "set", "tuple")
+                and not isinstance(candidate, TYPES[spec.name])
+            ):
                 candidate = TYPES[spec.name](candidate)
         elif value.lower() == "none":
             candidate = None
@@ -87,7 +90,7 @@ def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
         if data is not None:
             if not isinstance(data["value"], TYPES[expected_type]):
                 raise TypeError(f"Variable '{value}' is not a {expected_type}.")
-            return TYPES[expected_type](data["value"])
+            return data["value"]
         try:
             parsed = _literal(value, runtime)
         except (ValueError, SyntaxError) as error:
@@ -100,6 +103,8 @@ def parse_value(value: str, expected_type: str, runtime: Runtime) -> Any:
         if data is not None:
             raw = data["value"]
             if isinstance(raw, (bytes, bytearray)):
+                if isinstance(raw, TYPES[expected_type]):
+                    return raw
                 return TYPES[expected_type](raw)
             return TYPES[expected_type](str(raw).encode("utf-8"))
         raw = _literal(value, runtime) if quoted else value

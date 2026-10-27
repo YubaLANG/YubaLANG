@@ -44,7 +44,13 @@ def format_source(source: str) -> str:
 
         if command == "if":
             blocks.append(("if", line_number))
-        elif command == "func" and len(parts) >= 3 and parts[1] == "define":
+        elif command == "func" and (
+            (len(parts) >= 3 and parts[1] == "define")
+            or (
+                len(parts) >= 4
+                and parts[1:3] == ("private", "define")
+            )
+        ):
             blocks.append(("func", line_number))
         elif command == "loop" and len(parts) >= 3 and parts[1] in ("for", "while"):
             blocks.append(("loop", line_number))

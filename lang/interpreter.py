@@ -67,6 +67,16 @@ def _split(line: str) -> list[str]:
     return list(_split_cached(line))
 
 
+def _execute_parts(parts: list[str], runtime: Runtime, source_name: str) -> None:
+    if parts:
+        execute_command(
+            parts,
+            runtime,
+            lambda name, args: _invoke_function(name, args, runtime),
+            source_name,
+        )
+
+
 def _type_of(value: Any) -> str:
     return Runtime.type_name(value)
 
@@ -77,14 +87,7 @@ def interpret(
     source_name: str = "<memory>",
 ) -> None:
     runtime = runtime or Runtime()
-    parts = _split(line.strip())
-    if parts:
-        execute_command(
-            parts,
-            runtime,
-            lambda name, args: _invoke_function(name, args, runtime),
-            source_name,
-        )
+    _execute_parts(_split(line.strip()), runtime, source_name)
 
 
 def _invoke_function(
@@ -95,12 +98,21 @@ def _invoke_function(
 ) -> Any:
     resolved_name = runtime.resolve_function(name)
     if resolved_name is None:
+        if "." in name:
+            alias, function_name = name.split(".", 1)
+            namespace = runtime.module_aliases.get(alias, alias)
+            if f"{namespace}.{function_name}" in runtime.private_functions:
+                raise ValueError(
+                    f"Function '{name}' is private to its module."
+                )
         raise ValueError(f"Function '{name}' is not defined.")
     if runtime.function_call_depth >= MAX_FUNCTION_CALL_DEPTH:
         raise RecursionError(
             f"Maximum function call depth ({MAX_FUNCTION_CALL_DEPTH}) exceeded."
         )
-    function = runtime.functions[resolved_name]
+    function = runtime.get_function(resolved_name)
+    if function is None:
+        raise ValueError(f"Function '{name}' is not defined.")
     keyword_arguments = keyword_arguments or {}
     if function.variadic_parameter is None and len(arguments) > len(function.parameters):
         raise TypeError(
@@ -173,7 +185,14 @@ def _invoke_function(
             "type": f"tuple[{variadic_type}]" if variadic_type else "tuple",
             "value": tuple(extra_arguments),
         }
-    runtime.scopes.append(local_scope)
+    caller_scopes = runtime.scopes
+    caller_function_scope_starts = runtime.function_scope_starts
+    runtime.scopes = [
+        caller_scopes[0],
+        *function.closure_scopes,
+        local_scope,
+    ]
+    runtime.function_scope_starts = [1]
     runtime.current_namespaces.append(function.namespace)
     runtime.function_call_depth += 1
     call_source, call_line = runtime.current_location
@@ -206,7 +225,8 @@ def _invoke_function(
         runtime.call_stack.pop()
         runtime.function_call_depth -= 1
         runtime.current_namespaces.pop()
-        runtime.scopes.pop()
+        runtime.function_scope_starts = caller_function_scope_starts
+        runtime.scopes = caller_scopes
     if function.return_type is not None and not runtime.value_matches_type(
         function.return_type, None
     ):
@@ -225,6 +245,11 @@ def _execute_function_call(parts: list[str], runtime: Runtime) -> None:
         if variable is not None and isinstance(variable["value"], FunctionReference):
             name = variable["value"].name
     if runtime.resolve_function(name) is None:
+        if "." in name:
+            alias, function_name = name.split(".", 1)
+            namespace = runtime.module_aliases.get(alias, alias)
+            if f"{namespace}.{function_name}" in runtime.private_functions:
+                raise ValueError(f"Function '{name}' is private to its module.")
         raise ValueError(f"Function '{name}' is not defined.")
     call_parts = parts[3:]
     destination = None
@@ -333,7 +358,8 @@ def _execute_import(parts: list[str], runtime: Runtime, source_name: str) -> Non
             raise ValueError(f"Cannot read module '{module_path}': {error}") from error
         runtime.current_namespaces.append(namespace)
         try:
-            execute_lines(lines, runtime, str(module_path), namespace=namespace)
+            with runtime.global_scope():
+                execute_lines(lines, runtime, str(module_path), namespace=namespace)
         finally:
             runtime.current_namespaces.pop()
         runtime.loaded_modules[key] = namespace
@@ -398,9 +424,10 @@ def _execute_try_block(
         runtime.exception_capture_depth += 1
         try:
             try_lines, try_numbers = sections["try"]
-            execute_lines(
-                try_lines, runtime, source_name, try_numbers, namespace
-            )
+            with runtime.scope():
+                execute_lines(
+                    try_lines, runtime, source_name, try_numbers, namespace
+                )
         except RuntimeErrorSignal as error_signal:
             signal = error_signal
         finally:
@@ -420,24 +447,23 @@ def _execute_try_block(
                 if isinstance(signal.error, LanguageException)
                 else str(signal.error)
             )
-            if catch_name is not None:
-                runtime.scopes.append({})
-                runtime.define_var(catch_name, _type_of(caught_value), caught_value)
-            try:
+            with runtime.scope():
+                if catch_name is not None:
+                    runtime.define_var(
+                        catch_name, _type_of(caught_value), caught_value
+                    )
                 execute_lines(
                     sections["catch"][0], runtime, source_name,
                     sections["catch"][1], namespace,
                 )
-            finally:
-                if catch_name is not None:
-                    runtime.scopes.pop()
     finally:
         runtime.exception_capture_depth -= 1
         finally_lines, finally_numbers = sections["finally"]
         if finally_lines:
-            execute_lines(
-                finally_lines, runtime, source_name, finally_numbers, namespace
-            )
+            with runtime.scope():
+                execute_lines(
+                    finally_lines, runtime, source_name, finally_numbers, namespace
+                )
     return index
 
 
@@ -541,19 +567,30 @@ def execute_lines(
 
                 for condition, body, body_line_numbers in branches:
                     if evaluate_condition(condition, runtime):
-                        execute_lines(
-                            body, runtime, source_name, body_line_numbers, namespace
-                        )
+                        with runtime.scope():
+                            execute_lines(
+                                body, runtime, source_name,
+                                body_line_numbers, namespace
+                            )
                         break
 
-            elif command == "func" and len(parts) >= 3 and parts[1] == "define":
-                function_name = parts[2]
+            elif command == "func" and (
+                (len(parts) >= 3 and parts[1] == "define")
+                or (
+                    len(parts) >= 4
+                    and parts[1:3] == ["private", "define"]
+                )
+            ):
+                is_private = parts[1] == "private"
+                name_index = 3 if is_private else 2
+                declaration_index = name_index + 1
+                function_name = parts[name_index]
                 parameters = []
                 defaults = {}
                 variadic_parameter = None
                 parameter_types = {}
                 optional_seen = False
-                declarations = parts[3:]
+                declarations = parts[declaration_index:]
                 return_type = None
                 if "->" in declarations:
                     return_index = declarations.index("->")
@@ -620,21 +657,65 @@ def execute_lines(
                     raise SyntaxError(f"Function '{function_name}' has duplicate parameters.")
                 body = []
                 body_line_numbers = []
+                function_depth = 1
                 index += 1
-                while index < len(lines) and lines[index].strip() != "endfunc":
+                while index < len(lines):
+                    nested_line = lines[index].strip()
+                    if nested_line.startswith(
+                        ("func define ", "func private define ")
+                    ):
+                        function_depth += 1
+                    elif nested_line == "endfunc":
+                        function_depth -= 1
+                        if function_depth == 0:
+                            break
                     body.append(lines[index])
                     body_line_numbers.append(line_numbers[index])
                     index += 1
                 if index == len(lines):
                     raise SyntaxError(f"Missing endfunc for function '{function_name}'.")
-                qualified_name = (
-                    f"{namespace}.{function_name}" if namespace else function_name
+                closure_scopes = tuple(
+                    runtime.scopes[
+                        runtime.function_scope_starts[-1]
+                        if runtime.function_scope_starts else 1:
+                    ]
                 )
-                runtime.functions[qualified_name] = UserFunction(
+                function = UserFunction(
                     parameters, body, source_name, body_line_numbers,
                     namespace or "", defaults, variadic_parameter,
-                    parameter_types, return_type,
+                    parameter_types, return_type, closure_scopes,
                 )
+                if closure_scopes:
+                    if is_private:
+                        raise SyntaxError(
+                            "Private visibility applies only to module-level functions."
+                        )
+                    runtime.closure_counter += 1
+                    local_name = (
+                        f"__closure_{runtime.closure_counter}.{function_name}"
+                    )
+                    qualified_name = (
+                        f"{namespace}.{local_name}" if namespace else local_name
+                    )
+                    runtime.closure_functions[qualified_name] = function
+                    runtime.define_var(
+                        function_name,
+                        "function",
+                        FunctionReference(qualified_name, function),
+                    )
+                else:
+                    if is_private and not namespace:
+                        raise SyntaxError(
+                            "Private functions must be declared in a module."
+                        )
+                    qualified_name = (
+                        f"{namespace}.{function_name}" if namespace else function_name
+                    )
+                    runtime.functions[qualified_name] = function
+                    if is_private:
+                        runtime.private_functions.add(qualified_name)
+                    else:
+                        runtime.private_functions.discard(qualified_name)
 
             elif command == "func" and len(parts) >= 3 and parts[1] == "call":
                 _execute_function_call(parts, runtime)
@@ -646,8 +727,16 @@ def execute_lines(
                 loop_type, condition = parts[1], " ".join(parts[2:])
                 body = []
                 body_line_numbers = []
+                loop_depth = 1
                 index += 1
-                while index < len(lines) and lines[index].strip() != "endloop":
+                while index < len(lines):
+                    nested_line = lines[index].strip()
+                    if nested_line.startswith(("loop for ", "loop while ")):
+                        loop_depth += 1
+                    elif nested_line == "endloop":
+                        loop_depth -= 1
+                        if loop_depth == 0:
+                            break
                     body.append(lines[index])
                     body_line_numbers.append(line_numbers[index])
                     index += 1
@@ -657,28 +746,32 @@ def execute_lines(
                     count = evaluate_expression(condition, runtime)
                     if not isinstance(count, int) or isinstance(count, bool):
                         raise TypeError("loop for count must evaluate to an integer.")
-                    for _ in range(count):
-                        try:
-                            execute_lines(
-                                body, runtime, source_name, body_line_numbers, namespace
-                            )
-                        except ContinueException:
-                            continue
-                        except BreakException:
-                            break
+                    with runtime.scope():
+                        for _ in range(count):
+                            try:
+                                execute_lines(
+                                    body, runtime, source_name,
+                                    body_line_numbers, namespace
+                                )
+                            except ContinueException:
+                                continue
+                            except BreakException:
+                                break
                 else:
-                    while evaluate_condition(condition, runtime):
-                        try:
-                            execute_lines(
-                                body, runtime, source_name, body_line_numbers, namespace
-                            )
-                        except ContinueException:
-                            continue
-                        except BreakException:
-                            break
+                    with runtime.scope():
+                        while evaluate_condition(condition, runtime):
+                            try:
+                                execute_lines(
+                                    body, runtime, source_name,
+                                    body_line_numbers, namespace
+                                )
+                            except ContinueException:
+                                continue
+                            except BreakException:
+                                break
 
             else:
-                interpret(raw_line, runtime, source_name)
+                _execute_parts(parts, runtime, source_name)
         except (
             SyntaxError, ValueError, TypeError, ZeroDivisionError, IndexError,
             KeyError, AttributeError, OverflowError, OSError, EOFError, RecursionError,

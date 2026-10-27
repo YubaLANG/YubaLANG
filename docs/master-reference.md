@@ -201,6 +201,8 @@ result; the legacy four-operand comparison form is also supported.
 Unless noted, a command that writes a result requires an existing destination
 variable of a compatible declared type. `iter` creates its iterator
 destination if it does not already exist.
+The [standard-library policy](standard-library.md) defines API stability and
+the current built-in command organization.
 
 ### Output, input, conversion, and comparison
 
@@ -233,6 +235,7 @@ accept two operands. Division and modulo by zero are runtime errors.
 | Command form | Behavior |
 | --- | --- |
 | `list append <list> <value>` | Append a value. |
+| `list set <list> <index> <value>` | Replace an existing list element. |
 | `list get <list> <index> <destination>` | Read a zero-based list index. |
 | `list len <list> <int-destination>` | Store list length. |
 | `dict set <dict> <key> <value>` | Insert or replace a mapping entry. |
@@ -255,7 +258,10 @@ accept two operands. Division and modulo by zero are runtime errors.
 | `sorted <iterable> <list-destination> [reverse]` | Return sorted values; `reverse` is boolean. |
 | `zip <iterable1> <iterable2> [...] <list-destination>` | Pair values into tuples, stopping at the shortest input. |
 
-`slice` supports strings, lists, tuples, bytes, and bytearrays. `iter` and
+List and tuple indexes accept negative offsets from the end. Out-of-range
+indexes and missing dictionary keys are runtime errors with source locations.
+Typed-list replacements are validated before mutation. `slice` supports
+strings, lists, tuples, bytes, and bytearrays. `iter` and
 `next` use Python-style iterator behavior; reading an exhausted iterator
 without a default raises a language error.
 
@@ -355,8 +361,13 @@ use positional arguments followed by `name=value` arguments. Missing,
 duplicate, unknown, or excessive arguments are errors. A final `*name`
 parameter collects remaining positional arguments into a tuple.
 
-Function calls have local scopes. A function may `return` without a value or
-return a value; assign a returned value with `->`:
+Each `if`/`elseif`/`else` branch, loop, and `try`/`catch`/`finally` body has
+a lexical scope. Names declared in a block are removed when the block ends;
+`set` updates the nearest existing binding. Each function call has a separate
+local scope and does not capture caller-local variables. Nested functions
+capture bindings from their defining function or block by reference, and the
+captured bindings remain alive as long as the closure is reachable. A function
+may `return` without a value or return a value; assign a returned value with `->`:
 
 ```hl
 func define identity value
@@ -451,6 +462,10 @@ package dependency resolves to that package's manifest entry. Modules execute
 once per runtime; import cycles are errors. Imported functions are called
 through their module namespace, and module variables share the runtime's
 global scope.
+Module-level functions are public by default. Declare a helper with
+`func private define <name> ... endfunc` to prevent importers from calling it;
+functions in that module can still call the helper. Private visibility is
+limited to module-level functions.
 
 Projects use `yuba.json` and `yuba.lock.json`. Dependencies may refer to local
 paths or Git sources with an optional revision. Lockfile format 2 records
@@ -550,6 +565,10 @@ trusted libraries. See the [C ABI guide](c-abi.md).
 - Mutable lists, dictionaries, sets, bytearrays, and records are shared by
   reference when aliased. Typed generic collection mutations are checked
   against annotations reachable through those aliases.
+- Strings, tuples, and bytes are immutable. Assignment does not copy values;
+  collection literals and collection-producing built-ins create a new outer
+  container without deep-copying its elements, so a tuple may contain shared
+  mutable values.
 - There is no general expression language, static inference is conservative,
   and dynamic values may evade static diagnostics while remaining subject to
   runtime checks.

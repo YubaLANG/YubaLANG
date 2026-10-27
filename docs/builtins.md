@@ -48,6 +48,13 @@ raises an error when the iterator is exhausted and no default is supplied.
 `enumerate` produces `(index, value)` tuples; `zip` produces tuples. `sorted`
 accepts `true` or `false` for its optional `reverse` argument.
 
+Lists also support `list get <list> <index> <destination>` and
+`list set <list> <index> <value>`. Tuple reads use
+`tuple get <tuple> <index> <destination>`. Indexes support Python-style
+negative offsets; out-of-range indexes and missing dictionary keys are
+source-located runtime errors. Replacements in typed lists are checked before
+the list is mutated.
+
 `map` and `filter` accept a built-in unary function name (such as `abs`, `int`,
 `float`, `str`, `bool`, `ascii`, `repr`, or `len`) or a user-defined function
 that takes one parameter and returns a value. Functions can be declared with

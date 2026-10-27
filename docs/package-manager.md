@@ -128,12 +128,13 @@ and locked graph, including transitive path and Git packages. Imports are
 loaded once per run. Dependency cycles are reported during installation or
 validation; module-import cycles are errors at runtime.
 
-All functions declared in a module are available through its namespace;
-`func call namespace.function` is the call form. A function can call another
-function in its own module without repeating the namespace. Module top-level
-commands run once when imported, and variables declared there use the
-interpreter's shared global scope. Use function-local variables for library
-implementation details. An `as` alias must be a valid identifier.
+Module-level functions are public by default and available through the
+namespace; `func call namespace.function` is the call form. A module can mark
+a helper private with `func private define helper ... endfunc`. Private
+functions remain callable from the module's other functions but are not
+available to importers. Module top-level commands run once when imported, and
+variables declared there use the interpreter's shared global scope. An `as`
+alias must be a valid identifier.
 
 Missing modules and package/lockfile problems are reported with an actionable
 source diagnostic or package-manager error. Runtime imports use the checked

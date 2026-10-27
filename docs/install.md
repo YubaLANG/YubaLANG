@@ -85,7 +85,12 @@ checks globally.
 ## Build pipeline
 
 Push a version tag such as `v1.2.0` to build and publish the four platform
-archives. The workflow runs the test suite on each build platform, bundles
+archives. The build workflow runs the test suite on each release platform, bundles
 Python with PyInstaller, and attaches SHA-256 checksums to the GitHub release.
 Builds run on GitHub-hosted Windows, Ubuntu 22.04, macOS Intel, and Apple
 Silicon runners.
+
+Pull requests and branch pushes also run the test suite on Windows, Linux,
+and macOS with Python 3.10 through 3.14. CI checks formatting for runnable
+examples and test fixtures, and builds and smoke-tests a standalone executable
+on Ubuntu.

@@ -67,7 +67,8 @@ _HOVER: dict[str, str] = {
     "input": "**`text input <string_variable>`** reads a line into a string variable.",
     "output": "**`text output <value>`** prints a value.",
     "func": (
-        "**`func define <name> [parameters] ... endfunc`** defines a function; "
+        "**`func define <name> [parameters] ... endfunc`** defines a public function; "
+        "`func private define <name> ... endfunc` defines a module-private one. "
         "use `func call` to call it."
     ),
     "import": (
@@ -178,6 +179,14 @@ def _position(line: int, column: int) -> dict[str, int]:
     return {"line": line, "character": column}
 
 
+def _function_definition(parts: list[str]) -> tuple[str, list[str]] | None:
+    if len(parts) >= 3 and parts[:2] == ["func", "define"]:
+        return parts[2], parts[3:]
+    if len(parts) >= 4 and parts[:3] == ["func", "private", "define"]:
+        return parts[3], parts[4:]
+    return None
+
+
 def _diagnostic(line_number: int, line: str, message: str, code: str) -> dict[str, Any]:
     return {
         "range": {
@@ -241,14 +250,20 @@ def analyze_document(source: str) -> list[dict[str, Any]]:
                 else:
                     blocks.append(("if", line_number))
         elif command == "func":
-            if len(parts) >= 3 and parts[1] == "define":
-                function_name = parts[2]
-                declarations = parts[3:]
+            definition = _function_definition(parts)
+            if definition is not None:
+                function_name, declarations = definition
+                if "->" in declarations:
+                    declarations = declarations[:declarations.index("->")]
                 variadic = [declaration for declaration in declarations if declaration.startswith("*")]
                 parameter_names = [
                     declaration[1:] if declaration.startswith("*")
                     else declaration.split("=", 1)[0]
                     for declaration in declarations
+                ]
+                parameter_names = [
+                    parameter.partition(":")[0]
+                    for parameter in parameter_names
                 ]
                 defaults_started = False
                 invalid_defaults = False
@@ -434,14 +449,15 @@ def _symbols(source: str) -> dict[str, dict[str, int]]:
         name: str | None = None
         if len(parts) >= 3 and parts[:2] == ["define", "var"]:
             name = parts[2].removesuffix(":")
-        elif len(parts) >= 3 and parts[:2] == ["func", "define"]:
-            name = parts[2]
+        definition = _function_definition(parts)
+        if definition is not None:
+            name = definition[0]
         if name:
             location = next(((word, column) for word, column in identifiers if word == name), None)
             if location:
                 definitions.setdefault(name, {"line": line_number, "character": location[1]})
-        if len(parts) >= 4 and parts[:2] == ["func", "define"]:
-            declarations = parts[3:]
+        if definition is not None:
+            declarations = definition[1]
             if "->" in declarations:
                 declarations = declarations[:declarations.index("->")]
             for parameter in declarations:
@@ -463,14 +479,15 @@ def _function_signatures(source: str) -> dict[str, tuple[list[str], str | None]]
             parts = _split(line.strip())
         except SyntaxError:
             continue
-        if len(parts) >= 3 and parts[:2] == ["func", "define"]:
-            declarations = parts[3:]
+        definition = _function_definition(parts)
+        if definition is not None:
+            function_name, declarations = definition
             return_type = None
             if "->" in declarations:
                 return_index = declarations.index("->")
                 return_type = " ".join(declarations[return_index + 1:])
                 declarations = declarations[:return_index]
-            signatures[parts[2]] = (declarations, return_type)
+            signatures[function_name] = (declarations, return_type)
     return signatures
 
 
@@ -481,17 +498,22 @@ def _document_symbols(source: str, uri: str) -> list[dict[str, Any]]:
             parts = _split(line.strip())
         except SyntaxError:
             continue
-        if len(parts) >= 3 and parts[:2] in (
-            ["define", "var"], ["func", "define"], ["record", "define"],
-        ):
-            name = parts[2].removesuffix(":")
+        definition = _function_definition(parts)
+        is_variable = len(parts) >= 3 and parts[:2] == ["define", "var"]
+        is_record = len(parts) >= 3 and parts[:2] == ["record", "define"]
+        if is_variable or is_record or definition is not None:
+            name = (
+                parts[2].removesuffix(":") if is_variable
+                else definition[0] if definition is not None
+                else parts[2]
+            )
             token = next(
                 ((word, column) for word, column in _identifier_positions(line) if word == name),
                 None,
             )
             if token is None:
                 continue
-            kind = {"define": 13, "func": 12, "record": 23}[parts[0]]
+            kind = 13 if is_variable else 12 if definition is not None else 23
             result.append({
                 "name": name,
                 "kind": kind,

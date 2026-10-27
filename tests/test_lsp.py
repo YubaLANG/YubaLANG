@@ -65,6 +65,35 @@ class LanguageServerTests(unittest.TestCase):
         self.assertEqual(response["result"]["signatures"][0]["label"], "greet(name, greeting=hello)")
         self.assertEqual(response["result"]["activeParameter"], 1)
 
+    def test_private_function_definitions_are_analyzed_and_visible_to_editor_tools(self):
+        source = (
+            "func private define helper value:int -> int\n"
+            "    return value\n"
+            "endfunc\n"
+            "func call helper "
+        )
+        self.assertEqual(analyze_document(source), [])
+
+        server = LanguageServer()
+        uri = "file:///private-function.yl"
+        server.documents[uri] = source
+        signature, _ = server.handle({
+            "jsonrpc": "2.0", "id": 1, "method": "textDocument/signatureHelp",
+            "params": {
+                "textDocument": {"uri": uri},
+                "position": {"line": 3, "character": len("func call helper ")},
+            },
+        })
+        self.assertEqual(
+            signature["result"]["signatures"][0]["label"],
+            "helper(value:int) -> int",
+        )
+        symbols, _ = server.handle({
+            "jsonrpc": "2.0", "id": 2, "method": "textDocument/documentSymbol",
+            "params": {"textDocument": {"uri": uri}},
+        })
+        self.assertIn("helper", {item["name"] for item in symbols["result"]})
+
     def test_signature_help_and_parameter_symbols_support_types(self):
         server = LanguageServer()
         uri = "file:///typed-signature.yl"

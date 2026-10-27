@@ -2,8 +2,8 @@
 
 This replaces the old 1.2 release checklist. It is a feature backlog, not a
 promise that every long-term item ships in 1.3.0. P0 items are the proposed
-1.3.0 release gate; P1 items are follow-on work to prioritize after that
-release. Keep language/runtime responsibilities separate from YubaPKG:
+1.3.0 release gate; P1 items are follow-on unless explicitly promoted into
+the release scope. Keep language/runtime responsibilities separate from YubaPKG:
 YubaPKG resolves, downloads, and installs dependencies; YubaLANG executes
 programs and imports installed packages.
 
@@ -55,24 +55,24 @@ programs and imports installed packages.
 
 ### Functions, modules, and data modeling
 
-- [ ] Add explicit lexical scopes for functions and blocks, with predictable
+- [x] Add explicit lexical scopes for functions and blocks, with predictable
   variable lifetime and no accidental global leakage.
-- [ ] Support closures and first-class functions with defined capture and
+- [x] Support closures and first-class functions with defined capture and
   lifetime semantics.
 - [x] Expand function parameters to support named arguments and defaults with
   defined ordering, duplicate, and missing-argument rules.
 - [x] Add a final `*name` parameter that collects extra positional arguments
   into a tuple.
-- [ ] Add a documented export/visibility model for modules instead of
+- [x] Add a documented export/visibility model for modules instead of
   relying only on all-functions-visible namespace behavior.
 - [x] Add user-defined records with typed field access, construction, and
   structural equality; defer class-based extensions until semantics are set.
 - [x] Document record mutation and aliasing semantics.
 - [ ] Evaluate class-based object orientation only after record, method,
   visibility, inheritance, and initialization semantics are designed.
-- [ ] Add collection indexing, safe mutation, slicing, iteration protocols,
+- [x] Add collection indexing, safe mutation, slicing, iteration protocols,
   and predictable behavior for missing keys and out-of-range indexes.
-- [ ] Define immutable values and copying/reference behavior for collections.
+- [x] Define immutable values and copying/reference behavior for collections.
 
 ### Types and errors
 
@@ -117,7 +117,7 @@ programs and imports installed packages.
   traced-memory workloads with reproducible baselines.
 - [x] Add reproducible startup, function, arithmetic, collection, and traced
   memory measurements.
-- [ ] Reduce interpreter dispatch overhead without changing program output or
+- [x] Reduce interpreter dispatch overhead without changing program output or
   diagnostics.
 - [x] Cache immutable command-tokenization results and add an in-process
   benchmark to measure interpreter execution separately from Python startup.
@@ -167,7 +167,7 @@ programs and imports installed packages.
 - [x] Explain why the process-based runner cannot report source coverage.
 - [x] Add a project run command that honors manifest entry points and checks
   installed dependencies against the lockfile.
-- [ ] Keep formatter behavior stable; add parser-based formatting tests for
+- [x] Keep formatter behavior stable; add parser-based formatting tests for
   every newly supported syntax form.
 
 ## P1 - Documentation and onboarding
@@ -189,8 +189,8 @@ programs and imports installed packages.
 
 - [ ] Run the complete test suite on Windows, Linux, and macOS for supported
   Python versions.
-- [ ] Add CI checks for formatting, packaging, documentation examples, and
-  cross-repository YubaPKG integration.
+- [x] Add CI checks for formatting, packaging, and documentation examples.
+- [ ] Add cross-repository YubaPKG integration checks.
 - [ ] Verify clean installation, project initialization, package restore,
   imports, tests, formatting, LSP startup, and native interop where
   supported.
@@ -198,7 +198,8 @@ programs and imports installed packages.
   what checksums do and do not protect against.
 - [ ] Maintain an explicit compatibility matrix for YubaLANG, YubaPKG,
   manifest versions, lockfile versions, and package compatibility.
-- [ ] Publish 1.3.0 release notes and migration guidance.
+- [x] Prepare 1.3.0 release notes and migration guidance.
+- [ ] Publish the release notes with the 1.3.0 release artifacts.
 
 ## Future major-version candidates
 

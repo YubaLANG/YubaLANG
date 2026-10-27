@@ -15,7 +15,9 @@
   tool command catalog.
 - [Built-in function reference](builtins.md): collections, strings,
   iteration, files, and type annotations.
+- [Standard-library organization and API stability policy](standard-library.md).
 - [1.2 to 1.3 migration notes](1.3-migration.md).
+- [1.3.0 release notes](1.3-release-notes.md).
 
 ## Projects and tools
 

@@ -19,6 +19,13 @@ def execute_collection_command(parts: list[str], runtime: Runtime) -> None:
         runtime.validate_container_mutation(collection, candidate)
         collection.append(value)
         return
+    if collection_type == "list" and action == "set" and len(parts) == 5:
+        index, value = int(parts[3]), resolve(parts[4], runtime)
+        candidate = list(collection)
+        candidate[index] = value
+        runtime.validate_container_mutation(collection, candidate)
+        collection[index] = value
+        return
     if collection_type == "list" and action == "get" and len(parts) == 5:
         index, destination = int(parts[3]), parts[4]
         runtime.assign_var(destination, collection[index])

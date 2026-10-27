@@ -2,13 +2,14 @@
 
 import ast
 import re
+from collections import ChainMap
 
 from .runtime import TYPES
 from .syntax import tokenize_line
 from .type_system import TypeSpec, format_type, is_known_type, parse_type
 
 
-_FUNCTION = re.compile(r"^func define ")
+_FUNCTION = re.compile(r"^func (?:private )?define ")
 _IDENTIFIER = re.compile(r"^[A-Za-z_]\w*$")
 
 
@@ -285,6 +286,7 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
     function_parameters: dict[str, list[tuple[str, str | None]]] = {}
     function_returns: list[str | None] = []
     function_depth = 0
+    block_stack: list[str] = []
 
     for line_number, line in enumerate(lines):
         stripped = line.strip()
@@ -296,10 +298,35 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
             continue
         if not parts:
             continue
+        command = parts[0]
+        branch_blocks = {
+            "elseif": "if",
+            "else": "if",
+            "catch": "try",
+            "finally": "try",
+        }
+        if (
+            command in branch_blocks
+            and block_stack
+            and block_stack[-1] == branch_blocks[command]
+        ):
+            scopes.pop()
+            scopes.append({})
+        end_blocks = {"endif": "if", "endloop": "loop", "endtry": "try"}
+        if (
+            command in end_blocks
+            and block_stack
+            and block_stack[-1] == end_blocks[command]
+        ):
+            block_stack.pop()
+            scopes.pop()
         if _FUNCTION.match(stripped):
             function_depth += 1
-            scopes.append(dict(globals_))
-            declarations = parts[3:]
+            scopes.append({})
+            block_stack.append("func")
+            name_index = 3 if parts[1] == "private" else 2
+            function_name = parts[name_index]
+            declarations = parts[name_index + 1:]
             return_type = None
             if "->" in declarations:
                 return_index = declarations.index("->")
@@ -337,7 +364,7 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                     scopes[-1][name] = None
                     parameter_types.append(None)
                     named_parameter_types.append((name, None))
-            function_parameters[parts[2]] = named_parameter_types
+            function_parameters[function_name] = named_parameter_types
             if (
                 return_type
                 and all(parameter_types)
@@ -348,20 +375,29 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                         f"({', '.join(parameter_types)}) -> {normalized_return_type}"
                     )
                     if is_known_type(function_spec, set(record_types)):
-                        function_types[parts[2]] = format_type(function_spec)
+                        function_types[function_name] = format_type(function_spec)
                     else:
-                        function_types[parts[2]] = None
+                        function_types[function_name] = None
                 except ValueError:
-                    function_types[parts[2]] = None
+                    function_types[function_name] = None
             else:
-                function_types[parts[2]] = None
+                function_types[function_name] = None
             continue
         if parts[0] == "endfunc" and function_depth:
+            if block_stack and block_stack[-1] == "func":
+                block_stack.pop()
             scopes.pop()
             function_depth -= 1
             function_returns.pop()
             continue
-        variables = scopes[-1]
+        variables = ChainMap(scopes[-1], *reversed(scopes[:-1]))
+
+        def update_type(name: str, type_name: str) -> None:
+            target = next(
+                (scope for scope in reversed(scopes) if name in scope),
+                scopes[-1],
+            )
+            target[name] = type_name
         if parts[0] == "record" and len(parts) >= 3 and parts[1] == "define":
             fields = {}
             for declaration in parts[3:]:
@@ -424,9 +460,9 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
 
         if parts[0] == "convert":
             if len(parts) == 4 and parts[2] == "to" and parts[3] in TYPES:
-                variables[parts[1]] = parts[3]
+                update_type(parts[1], parts[3])
             elif len(parts) == 3 and parts[2] in TYPES:
-                variables[parts[1]] = parts[2]
+                update_type(parts[1], parts[2])
             continue
         if parts[0] == "assert":
             if len(parts) >= 2:
@@ -462,6 +498,11 @@ def check_types(lines: list[str]) -> list[tuple[int, str]]:
                     line_number,
                     f"Type mismatch: loop condition has type '{actual}', expected 'bool'.",
                 ))
+        block_openers = {"if": "if", "loop": "loop", "try": "try"}
+        if command in block_openers:
+            block_stack.append(block_openers[command])
+            scopes.append({})
+            continue
         if parts[0] == "set" and len(parts) >= 4 and parts[2] == "=":
             destination = parts[1]
             expected = variables.get(destination)

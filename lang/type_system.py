@@ -1,6 +1,6 @@
 """Parsing and shared representations for YubaLANG type annotations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import re
 
 
@@ -16,6 +16,7 @@ class TypeSpec:
 @dataclass(frozen=True)
 class FunctionReference:
     name: str
+    target: object | None = field(default=None, compare=False, repr=False)
 
 
 class TypeSyntaxError(ValueError):

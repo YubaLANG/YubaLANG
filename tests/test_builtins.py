@@ -232,6 +232,72 @@ class BuiltinCommandTests(unittest.TestCase):
                 self.run_program(source)
             self.assertIn("type", output.getvalue().lower())
 
+    def test_list_set_supports_negative_indices_and_validates_before_mutation(self) -> None:
+        runtime = self.run_program(
+            """
+            define var values: list[int] = [1, 2, 3]
+            list set values -1 4
+            """
+        )
+        self.assertEqual(runtime.require_var("values")["value"], [1, 2, 4])
+
+        for operation, message in (
+            ("list set values 3 4", "list assignment index out of range"),
+            ('list set values 0 "wrong"', "type"),
+        ):
+            runtime = Runtime()
+            output = io.StringIO()
+            with self.subTest(operation=operation), contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                execute_lines(
+                    ["define var values: list[int] = [1, 2, 3]", operation],
+                    runtime,
+                )
+            self.assertIn(message, output.getvalue().lower())
+            self.assertEqual(runtime.require_var("values")["value"], [1, 2, 3])
+
+    def test_collection_assignments_alias_mutable_values_and_reuse_immutable_values(self) -> None:
+        runtime = self.run_program(
+            """
+            define var original_list: list = [1]
+            define var list_alias: list = original_list
+            list append list_alias 2
+            define var original_dict: dict = {"count": 1}
+            define var dict_alias: dict = original_dict
+            dict set dict_alias "count" 2
+            define var original_tuple: tuple = (1, 2)
+            define var tuple_alias: tuple = original_tuple
+            define var original_bytes: bytes = "value"
+            define var bytes_alias: bytes = original_bytes
+            define var original_bytearray: bytearray = "value"
+            define var bytearray_alias: bytearray = original_bytearray
+            """
+        )
+
+        self.assertIs(
+            runtime.require_var("list_alias")["value"],
+            runtime.require_var("original_list")["value"],
+        )
+        self.assertEqual(runtime.require_var("original_list")["value"], [1, 2])
+        self.assertIs(
+            runtime.require_var("dict_alias")["value"],
+            runtime.require_var("original_dict")["value"],
+        )
+        self.assertEqual(
+            runtime.require_var("original_dict")["value"], {"count": 2}
+        )
+        self.assertIs(
+            runtime.require_var("tuple_alias")["value"],
+            runtime.require_var("original_tuple")["value"],
+        )
+        self.assertIs(
+            runtime.require_var("bytes_alias")["value"],
+            runtime.require_var("original_bytes")["value"],
+        )
+        self.assertIs(
+            runtime.require_var("bytearray_alias")["value"],
+            runtime.require_var("original_bytearray")["value"],
+        )
+
     def test_typed_function_signatures_and_references(self) -> None:
         runtime = self.run_program(
             """

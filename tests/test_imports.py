@@ -8,6 +8,67 @@ from lang.interpreter import Runtime, execute_lines, run_file
 
 
 class ImportTests(unittest.TestCase):
+    def test_module_private_functions_remain_callable_from_public_functions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "library.yl").write_text(
+                "func private define helper -> string\n"
+                '    return "hidden"\n'
+                "endfunc\n"
+                "func define answer -> string\n"
+                '    define var value: string = ""\n'
+                "    func call helper -> value\n"
+                "    return value\n"
+                "endfunc\n",
+                encoding="utf-8",
+            )
+            runtime = Runtime()
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                execute_lines(
+                    [
+                        "import library",
+                        'define var result: string = ""',
+                        "func call library.answer -> result",
+                        "text output result",
+                    ],
+                    runtime,
+                    str(root / "main.yl"),
+                )
+
+            self.assertEqual(output.getvalue(), "hidden\n")
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+                execute_lines(
+                    ["func call library.helper"],
+                    runtime,
+                    str(root / "main.yl"),
+                )
+
+        self.assertIn("is private to its module", output.getvalue())
+
+    def test_module_variables_remain_global_when_imported_from_a_block(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "library.yl").write_text(
+                "define var module_value: int = 42\n",
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                execute_lines(
+                    [
+                        "if true",
+                        "    import library",
+                        "endif",
+                        "text output module_value",
+                    ],
+                    Runtime(),
+                    str(root / "main.yl"),
+                )
+
+        self.assertEqual(output.getvalue(), "42\n")
+
     def test_import_accepts_utf8_bom(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

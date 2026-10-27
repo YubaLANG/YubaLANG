@@ -41,6 +41,19 @@ different dispatch strategy or bytecode would improve representative
 programs. No fixed collection-size limit is imposed; memory-exhaustion
 diagnostics are tested separately.
 
+The interpreter now dispatches the tokens already produced for each command
+instead of tokenizing the same line again. A paired 3-run sample on Windows 11
+with Python 3.14.0 and 3,000 iterations showed these in-process medians:
+
+| Workload | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| Function calls | 0.0483 s | 0.0408 s | 15.6% faster |
+| Arithmetic | 0.0534 s | 0.0400 s | 25.1% faster |
+| Collections | 0.1360 s | 0.1124 s | 17.4% faster |
+
+These are local measurements, not guarantees; repeat the benchmark on the
+target runtime and platform before drawing broader conclusions.
+
 In one local microbenchmark of 10,000 repeated no-op function calls, cached
 tokenization took about 14 ms versus about 70 ms without the cache. This
 measures a narrow, repeated-source workload; use the harness on representative

@@ -9,6 +9,7 @@ from pathlib import Path
 from lang.formatter import FormatError, format_source
 from lang.interpreter import execute_lines
 from lang.runtime import Runtime
+from lang.syntax import parse_program
 
 
 FIXTURES = Path(__file__).parent / "formatter"
@@ -58,6 +59,18 @@ class FormatterTests(unittest.TestCase):
             '    text output "done"\nendtry\n',
         )
 
+    def test_formats_module_private_function_blocks(self):
+        self.assertEqual(
+            format_source(
+                "func private define helper\n"
+                "text output \"hidden\"\n"
+                "endfunc\n"
+            ),
+            "func private define helper\n"
+            "    text output \"hidden\"\n"
+            "endfunc\n",
+        )
+
     def test_formats_expression_conditions_and_loop_blocks(self):
         self.assertEqual(
             format_source(
@@ -77,6 +90,44 @@ class FormatterTests(unittest.TestCase):
             "    text output count\n"
             "endloop\n",
         )
+
+    def test_formats_and_parses_extended_language_forms_without_changing_output(self):
+        source = (
+            "func define greet name greeting=hello\n"
+            "text output greeting\n"
+            "endfunc\n"
+            "func define collect first *rest\n"
+            "return rest\n"
+            "endfunc\n"
+            "define var values: tuple = ()\n"
+            "func call collect 1 2 3 -> values\n"
+            "record define Point x:int y:int\n"
+            "record create Point point 1 2\n"
+            "assert true \"valid record\"\n"
+            "if values == (2, 3)\n"
+            "func call greet name=Ada greeting=welcome\n"
+            "endif\n"
+            "try\n"
+            "throw \"handled\"\n"
+            "catch problem\n"
+            "text output problem\n"
+            "finally\n"
+            "text output \"finally\"\n"
+            "endtry\n"
+        )
+        formatted = format_source(source)
+        nodes = parse_program(formatted.splitlines(), source_name="formatted.yl")
+        self.assertEqual(len(nodes), 21)
+        self.assertIn("    func call greet name=Ada greeting=welcome", formatted)
+
+        outputs = []
+        for program in (source, formatted):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                execute_lines(program.splitlines(), Runtime())
+            outputs.append(output.getvalue())
+
+        self.assertEqual(outputs, ["welcome\nhandled\nfinally\n"] * 2)
 
     def test_check_accepts_windows_line_endings(self):
         with tempfile.TemporaryDirectory() as directory:

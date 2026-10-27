@@ -32,7 +32,9 @@ py YubaLANG.py fmt --check .
 ```
 
 Malformed quoting or unclosed/mismatched blocks are reported instead of being
-rewritten. Run the formatter tests with:
+rewritten. The regression tests parse formatted source and compare execution
+output across expressions, functions with named/default/variadic parameters,
+records, assertions, and exception blocks. Run the formatter tests with:
 
 ```text
 py -m unittest tests.test_formatter

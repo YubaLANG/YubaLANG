@@ -1,7 +1,9 @@
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from io import IOBase
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
+from weakref import WeakValueDictionary
 
 from .type_system import FunctionReference, TypeSpec, format_type, is_known_type, parse_type
 
@@ -53,12 +55,18 @@ class UserFunction:
     variadic_parameter: str | None = None
     parameter_types: dict[str, str] = field(default_factory=dict)
     return_type: str | None = None
+    closure_scopes: tuple[dict[str, dict[str, Any]], ...] = ()
 
 
 @dataclass
 class Runtime:
     scopes: list[dict[str, dict[str, Any]]] = field(default_factory=lambda: [{}])
     functions: dict[str, UserFunction] = field(default_factory=dict)
+    private_functions: set[str] = field(default_factory=set)
+    closure_functions: WeakValueDictionary[str, UserFunction] = field(
+        default_factory=WeakValueDictionary
+    )
+    closure_counter: int = 0
     records: dict[str, RecordDefinition] = field(default_factory=dict)
     native_libraries: dict[str, Any] = field(default_factory=dict)
     project_root: Path | None = None
@@ -67,6 +75,7 @@ class Runtime:
     loaded_modules: dict[str, str] = field(default_factory=dict)
     import_stack: list[str] = field(default_factory=list)
     current_namespaces: list[str] = field(default_factory=list)
+    function_scope_starts: list[int] = field(default_factory=list)
     function_call_depth: int = 0
     open_files: list[IOBase] = field(default_factory=list)
     exception_capture_depth: int = 0
@@ -78,20 +87,62 @@ class Runtime:
             alias, function_name = name.split(".", 1)
             namespace = self.module_aliases.get(alias, alias)
             key = f"{namespace}.{function_name}"
-            return key if key in self.functions else None
+            if key not in self.functions:
+                return None
+            if (
+                key in self.private_functions
+                and (
+                    not self.current_namespaces
+                    or self.current_namespaces[-1] != namespace
+                )
+            ):
+                return None
+            return key
+        variable = self.get_var(name)
+        if variable is not None and isinstance(
+            variable["value"], FunctionReference
+        ):
+            return variable["value"].name
         if self.current_namespaces:
             key = f"{self.current_namespaces[-1]}.{name}"
             if key in self.functions:
                 return key
         return name if name in self.functions else None
 
+    def get_function(self, name: str) -> UserFunction | None:
+        return self.functions.get(name) or self.closure_functions.get(name)
+
     def get_var(self, name: str) -> dict[str, Any] | None:
-        if name in self.scopes[-1]:
-            return self.scopes[-1][name]
-        return self.scopes[0].get(name)
+        start = self.function_scope_starts[-1] if self.function_scope_starts else 0
+        for scope in reversed(self.scopes[start:]):
+            if name in scope:
+                return scope[name]
+        if start:
+            return self.scopes[0].get(name)
+        return None
 
     def define_var(self, name: str, var_type: str, value: Any) -> None:
         self.scopes[-1][name] = {"type": var_type, "value": value}
+
+    @contextmanager
+    def scope(self) -> Iterator[None]:
+        self.scopes.append({})
+        try:
+            yield
+        finally:
+            self.scopes.pop()
+
+    @contextmanager
+    def global_scope(self) -> Iterator[None]:
+        scopes = self.scopes
+        function_scope_starts = self.function_scope_starts
+        self.scopes = [scopes[0]]
+        self.function_scope_starts = []
+        try:
+            yield
+        finally:
+            self.scopes = scopes
+            self.function_scope_starts = function_scope_starts
 
     def register_file(self, file_obj: IOBase) -> None:
         self.open_files.append(file_obj)
@@ -125,11 +176,14 @@ class Runtime:
             raise first_error
 
     def update_var(self, name: str, var_type: str, value: Any) -> None:
-        if name in self.scopes[-1]:
-            target_scope = self.scopes[-1]
-        elif name in self.scopes[0]:
+        start = self.function_scope_starts[-1] if self.function_scope_starts else 0
+        target_scope = next(
+            (scope for scope in reversed(self.scopes[start:]) if name in scope),
+            None,
+        )
+        if target_scope is None and start and name in self.scopes[0]:
             target_scope = self.scopes[0]
-        else:
+        if target_scope is None:
             raise ValueError(f"Variable '{name}' is not defined.")
         target_scope[name] = {"type": var_type, "value": value}
 
@@ -161,7 +215,7 @@ class Runtime:
         if spec.name == "function":
             if not isinstance(value, FunctionReference):
                 return False
-            function = self.functions.get(value.name)
+            function = value.target or self.get_function(value.name)
             if function is None or function.return_type is None:
                 return False
             if function.variadic_parameter is not None:
