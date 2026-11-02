@@ -11,6 +11,7 @@ from typing import Any
 MANIFEST_NAME = "yuba.json"
 LOCK_NAME = "yuba.lock.json"
 LOCK_VERSION = 2
+SUPPORTED_LOCK_VERSIONS = frozenset({1, LOCK_VERSION})
 SUPPORTED_YUBALANG = "1.3"
 COMPATIBLE_YUBALANG_VERSIONS = {"1.2", SUPPORTED_YUBALANG}
 PACKAGE_CACHE = Path(".yuba") / "packages"
@@ -113,7 +114,9 @@ def read_lockfile(root: Path) -> dict[str, Any]:
         ) from error
     if (
         not isinstance(data, dict)
-        or data.get("lock_version") != LOCK_VERSION
+        or not isinstance(data.get("lock_version"), int)
+        or isinstance(data.get("lock_version"), bool)
+        or data.get("lock_version") not in SUPPORTED_LOCK_VERSIONS
         or not isinstance(data.get("dependencies"), dict)
     ):
         raise PackageError(
@@ -321,10 +324,12 @@ def _check(
         raise PackageError(f"Dependency cycle detected: {cycle}.")
     package_stack = [*package_stack, package_name]
     lock = read_lockfile(root)
+    has_nested_graph = lock["lock_version"] == LOCK_VERSION
     manifest_dependencies = manifest["dependencies"]
     locked_dependencies = lock["dependencies"]
     if (
-        expected_dependencies is not None
+        has_nested_graph
+        and expected_dependencies is not None
         and locked_dependencies != expected_dependencies
     ):
         raise PackageError(
@@ -343,18 +348,19 @@ def _check(
                 f"Dependency '{name}' differs from the lockfile; "
                 "run 'YubaLANG package install'."
             )
-        package = entry.get("package")
-        if not isinstance(package, dict):
-            raise PackageError(
-                f"Lockfile entry for '{name}' has no package identity; "
-                "run 'YubaLANG package install'."
-            )
-        nested_dependencies = entry.get("dependencies")
-        if not isinstance(nested_dependencies, dict):
-            raise PackageError(
-                f"Lockfile entry for '{name}' has no locked dependency graph; "
-                "run 'YubaLANG package install'."
-            )
+        if has_nested_graph:
+            package = entry.get("package")
+            if not isinstance(package, dict):
+                raise PackageError(
+                    f"Lockfile entry for '{name}' has no package identity; "
+                    "run 'YubaLANG package install'."
+                )
+            nested_dependencies = entry.get("dependencies")
+            if not isinstance(nested_dependencies, dict):
+                raise PackageError(
+                    f"Lockfile entry for '{name}' has no locked dependency graph; "
+                    "run 'YubaLANG package install'."
+                )
         resolved = entry.get("resolved")
         if not isinstance(resolved, dict):
             raise PackageError(f"Lockfile entry for '{name}' is malformed.")
@@ -414,17 +420,18 @@ def _check(
                 f"Dependency '{name}' points to package "
                 f"'{dependency_manifest['name']}' at {dependency_root}."
             )
-        expected_package = {
-            field: dependency_manifest[field]
-            for field in ("name", "version", "entry", "yubalang")
-        }
-        if package != expected_package:
-            raise PackageError(
-                f"Package '{name}' metadata differs from the lockfile; "
-                "run 'YubaLANG package install'."
-            )
         resolve_entry(dependency_root, dependency_manifest)
-        _check(dependency_root, package_stack, nested_dependencies)
+        if has_nested_graph:
+            expected_package = {
+                field: dependency_manifest[field]
+                for field in ("name", "version", "entry", "yubalang")
+            }
+            if package != expected_package:
+                raise PackageError(
+                    f"Package '{name}' metadata differs from the lockfile; "
+                    "run 'YubaLANG package install'."
+                )
+            _check(dependency_root, package_stack, nested_dependencies)
 
 
 def _parse_add(args: list[str]) -> tuple[str, dict[str, str]]:

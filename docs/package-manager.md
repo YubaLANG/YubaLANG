@@ -2,12 +2,11 @@
 
 YubaLANG projects use a dependency-free JSON manifest named `yuba.json` and a
 generated `yuba.lock.json`. Both files should be checked into version control.
-YubaLANG 1.3 accepts manifests targeting runtime 1.2 or 1.3. The package
-interface uses lockfile format version 2; package tools must preserve the
-declared sources and the complete nested graph in that format. The current
-external YubaPKG release documents YubaLANG 1.2 manifest compatibility; its
-support for lockfile format 2 should be verified before using it to manage a
-YubaLANG 1.3 project.
+YubaLANG 1.3 accepts manifests targeting runtime 1.2 or 1.3 and reads lockfile
+formats 1 and 2. Format 1 records direct dependencies only; format 2 records
+the complete nested graph and is written by both YubaLANG and YubaPKG. YubaPKG
+accepts manifests targeting runtime 1.2 and 1.3. Use either package manager to
+install dependencies and generate a complete format-2 graph.
 
 ## Create a project
 
@@ -33,8 +32,7 @@ manifest has the following fields:
 are named packages whose source is either a relative path or a Git URL.
 YubaLANG 1.3 accepts manifests targeting versions `1.2` and `1.3`; projects
 initialized by YubaLANG 1.3 target `"yubalang": "1.3"`. The current YubaPKG
-release documents compatibility with YubaLANG 1.2, so check its manifest
-reference before using a 1.3-targeted manifest with that tool.
+release also supports both manifest versions.
 
 ```json
 {
@@ -98,10 +96,11 @@ are pinned to their exact commit. `package check` verifies manifests, nested
 lockfiles, package identities and entry files, and locked Git checkouts,
 including modified tracked files and untracked source files (excluding the
 manager's generated lockfile and nested cache). It does not contact Git
-remotes or modify files. Run `package install` after changing a manifest or
-moving a path dependency. A format-1 lockfile must be regenerated with
-`package install`. Git must be installed and reachable when installing a new
-or updated Git dependency.
+remotes or modify files. Legacy format-1 lockfiles are accepted for direct
+dependency checks and imports, but do not capture nested graphs or package
+identities; run `package install` to upgrade them to format 2. Both package
+managers write format 2 and lock the complete graph. Git must be installed and
+reachable when installing a new or updated Git dependency.
 
 ## Import modules
 

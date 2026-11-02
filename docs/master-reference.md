@@ -469,10 +469,12 @@ limited to module-level functions.
 
 Projects use `yuba.json` and `yuba.lock.json`. Dependencies may refer to local
 paths or Git sources with an optional revision. Lockfile format 2 records
-resolved Git commits and each package's nested dependency graph. Imports resolve
+resolved Git commits and each package's nested dependency graph; both package
+managers write this format, while the importer also reads legacy format-1
+lockfiles for direct dependencies. Imports resolve
 dependencies from the nearest package manifest; declared dependencies take
 precedence over local modules with the same name. Runtime imports validate the
-locked graph without network access. Commands include:
+locked dependencies without network access. Commands include:
 
 ```text
 YubaLANG package init [directory]

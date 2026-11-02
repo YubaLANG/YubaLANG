@@ -109,6 +109,63 @@ class PackageManagerTests(unittest.TestCase):
             )
             self.assertEqual(updated_manifest["dependencies"], {})
 
+    def test_imports_yubapkg_v1_lockfile_and_upgrades_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            dependency = root / "library"
+            write_package(
+                dependency,
+                "library",
+                "func define answer\n    return 42\nendfunc\n",
+            )
+            write_package(
+                project,
+                "app",
+                "import library\n"
+                "define var result: int = 0\n"
+                "func call library.answer -> result\n"
+                "text output result\n",
+            )
+
+            for package_root in (project, dependency):
+                manifest_path = package_root / "yuba.json"
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest["yubalang"] = "1.2"
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            manifest_path = project / "yuba.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["dependencies"] = {"library": {"path": "../library"}}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            (project / "yuba.lock.json").write_text(
+                json.dumps(
+                    {
+                        "lock_version": 1,
+                        "dependencies": {
+                            "library": {
+                                "source": {"path": "../library"},
+                                "resolved": {"path": "../library"},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            checked = run_cli("package", "check", cwd=project)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+            executed = run_cli(project / "main.yl", cwd=project)
+            self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
+            self.assertEqual(executed.stdout, "42\n")
+
+            installed = run_cli("package", "install", cwd=project)
+            self.assertEqual(installed.returncode, 0, installed.stderr)
+            upgraded_lock = json.loads(
+                (project / "yuba.lock.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(upgraded_lock["lock_version"], 2)
+
     def test_reports_dependency_cycles_during_install(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
