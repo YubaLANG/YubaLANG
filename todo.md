@@ -98,17 +98,17 @@ programs and imports installed packages.
 
 ### Standard library and platform APIs
 
-- [ ] Establish a versioned standard-library organization and API stability
+- [x] Establish a versioned standard-library organization and API stability
   policy.
-- [ ] Add path and filesystem utilities with cross-platform path semantics,
+- [x] Add path and filesystem utilities with cross-platform path semantics,
   safe file operations, and clear encoding behavior.
-- [ ] Add date/time, random, math, structured-data, and text-encoding modules
+- [x] Add date/time, random, math, structured-data, and text-encoding modules
   with deterministic test seams where appropriate.
-- [ ] Add process arguments, environment access, exit codes, and subprocess
+- [x] Add process arguments, environment access, exit codes, and subprocess
   APIs with explicit error handling.
-- [ ] Add a documented HTTP/client API only after timeout, TLS, redirect,
+- [x] Add a documented HTTP/client API only after timeout, TLS, redirect,
   response-size, and credential-handling rules are specified.
-- [ ] Define whether asynchronous I/O is needed before expanding networking
+- [x] Define whether asynchronous I/O is needed before expanding networking
   or concurrent APIs.
 
 ### Runtime and performance

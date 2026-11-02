@@ -100,6 +100,12 @@ destination; other incompatible assignments report a type error instead of
 leaving the variable's declared type inconsistent with its value. Use
 `convert` when intentionally changing a variable's type.
 
+The bundled `std.*` modules provide path, filesystem, time, randomness, math,
+JSON, encoding, process, and HTTP APIs. They are imported and called with
+`import std.module` and `func call namespace.function`; see the
+[standard-library reference](standard-library.md) for their signatures and
+security limits.
+
 Collections have no YubaLANG-specific size cap; their practical limits depend
 on available host memory. If allocation raises `MemoryError`, execution
 reports it as a source-located runtime diagnostic rather than exposing a

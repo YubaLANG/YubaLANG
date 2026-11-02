@@ -15,6 +15,7 @@ DOCUMENTED_EXAMPLES = (
     "strings_and_iteration.yl",
     "file_io.yl",
     "error_handling.yl",
+    "standard_library.yl",
     Path("modules") / "main.yl",
     Path("testing") / "smoke.yl",
 )

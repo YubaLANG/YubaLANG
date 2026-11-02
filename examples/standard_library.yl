@@ -1,0 +1,17 @@
+import std.path as path
+import std.json as json
+import std.math as math
+
+define var file_name: string = ""
+define var config: dict = {}
+define var config_text: string = ""
+define var root: float = 0.0
+
+func call path.basename "config/settings.json" -> file_name
+func call json.loads '{"enabled": true}' -> config
+func call json.dumps config -> config_text
+func call math.sqrt 81 -> root
+
+text output file_name
+text output config_text
+text output root

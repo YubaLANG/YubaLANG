@@ -2,7 +2,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from io import IOBase
 from pathlib import Path
-from typing import Any, Iterator
+import random
+import time
+from typing import Any, Callable, Iterator
 from weakref import WeakValueDictionary
 
 from .type_system import FunctionReference, TypeSpec, format_type, is_known_type, parse_type
@@ -69,7 +71,11 @@ class Runtime:
     closure_counter: int = 0
     records: dict[str, RecordDefinition] = field(default_factory=dict)
     native_libraries: dict[str, Any] = field(default_factory=dict)
+    native_functions: dict[str, Callable[..., Any]] = field(default_factory=dict)
     project_root: Path | None = None
+    program_args: list[str] = field(default_factory=list)
+    clock: Callable[[], float] = time.time
+    random_source: random.Random = field(default_factory=random.Random)
     module_aliases: dict[str, str] = field(default_factory=dict)
     module_alias_paths: dict[str, str] = field(default_factory=dict)
     loaded_modules: dict[str, str] = field(default_factory=dict)
@@ -87,7 +93,7 @@ class Runtime:
             alias, function_name = name.split(".", 1)
             namespace = self.module_aliases.get(alias, alias)
             key = f"{namespace}.{function_name}"
-            if key not in self.functions:
+            if key not in self.functions and key not in self.native_functions:
                 return None
             if (
                 key in self.private_functions
@@ -107,7 +113,11 @@ class Runtime:
             key = f"{self.current_namespaces[-1]}.{name}"
             if key in self.functions:
                 return key
-        return name if name in self.functions else None
+        return (
+            name
+            if name in self.functions or name in self.native_functions
+            else None
+        )
 
     def get_function(self, name: str) -> UserFunction | None:
         return self.functions.get(name) or self.closure_functions.get(name)

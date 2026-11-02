@@ -46,7 +46,7 @@ def _check_file(filename: str) -> int:
     return 0
 
 
-def _run_project(path: str = ".") -> int:
+def _run_project(path: str = ".", program_args: list[str] | None = None) -> int:
     root = find_project_root(Path(path))
     if root is None:
         print(f"run: no yuba.json found from {path}", file=sys.stderr)
@@ -59,7 +59,7 @@ def _run_project(path: str = ".") -> int:
     except PackageError as error:
         print(f"run: {error}", file=sys.stderr)
         return 1
-    run_file(str(entry))
+    run_file(str(entry), program_args)
     return 0
 
 
@@ -124,10 +124,20 @@ def main():
         return
 
     if len(sys.argv) >= 2 and sys.argv[1] == "run":
-        if len(sys.argv) > 3:
-            print("Usage: py YubaLANG.py run [project-directory]", file=sys.stderr)
+        arguments = sys.argv[2:]
+        program_args = []
+        if "--" in arguments:
+            separator = arguments.index("--")
+            program_args = arguments[separator + 1:]
+            arguments = arguments[:separator]
+        if len(arguments) > 1:
+            print(
+                "Usage: py YubaLANG.py run [project-directory] [-- arguments...]",
+                file=sys.stderr,
+            )
             sys.exit(2)
-        sys.exit(_run_project(sys.argv[2] if len(sys.argv) == 3 else "."))
+        project_path = arguments[0] if arguments else "."
+        sys.exit(_run_project(project_path, program_args))
 
     if len(sys.argv) >= 2 and sys.argv[1] in ("package", "pkg"):
         sys.exit(run_package_command(sys.argv[2:]))
@@ -179,9 +189,10 @@ def main():
             path = Path(positional[0])
         sys.exit(run_tests(path, filter_pattern, output_format))
 
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         print(
-            "Usage: py YubaLANG.py <file.yl> | run [project-directory] | repl | --lsp | "
+            "Usage: py YubaLANG.py <file.yl> [arguments...] | "
+            "run [project-directory] [-- arguments...] | repl | --lsp | "
             "check <file.yl> | fmt [--check|--write] <file.yl|directory>... | "
             "test [--filter PATTERN] [--json] [test-file.yl|test-directory] | "
             "package <init|add|remove|install|update|list|check>"
@@ -190,7 +201,7 @@ def main():
 
     filename = sys.argv[1]
 
-    run_file(filename)
+    run_file(filename, sys.argv[2:])
 
 
 if __name__ == "__main__":

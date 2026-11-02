@@ -23,6 +23,7 @@ from .runtime import (
     TYPES,
     UserFunction,
 )
+from .standard_library import is_standard_module, standard_module_functions
 from .string_builtins import resolve
 from .syntax import parse_line, tokenize_line
 from .type_system import FunctionReference, format_type, parse_type
@@ -106,6 +107,9 @@ def _invoke_function(
                     f"Function '{name}' is private to its module."
                 )
         raise ValueError(f"Function '{name}' is not defined.")
+    native_function = runtime.native_functions.get(resolved_name)
+    if native_function is not None:
+        return native_function(*arguments, **(keyword_arguments or {}))
     if runtime.function_call_depth >= MAX_FUNCTION_CALL_DEPTH:
         raise RecursionError(
             f"Maximum function call depth ({MAX_FUNCTION_CALL_DEPTH}) exceeded."
@@ -332,8 +336,13 @@ def _execute_import(parts: list[str], runtime: Runtime, source_name: str) -> Non
     if not alias.isidentifier():
         raise SyntaxError(f"Invalid module namespace '{alias}'.")
 
-    module_path = _module_file(module_name, runtime, source_name)
-    key = str(module_path.resolve())
+    standard_module = is_standard_module(module_name)
+    if standard_module:
+        module_path = None
+        key = f"<yubalang-stdlib:{module_name}>"
+    else:
+        module_path = _module_file(module_name, runtime, source_name)
+        key = str(module_path.resolve())
     if key in runtime.import_stack:
         cycle = " -> ".join((*runtime.import_stack, key))
         raise ValueError(f"Import cycle detected: {cycle}")
@@ -344,14 +353,29 @@ def _execute_import(parts: list[str], runtime: Runtime, source_name: str) -> Non
             )
         namespace = runtime.module_aliases[alias]
     else:
-        namespace = runtime.loaded_modules.get(key, alias)
+        namespace = module_name if standard_module else runtime.loaded_modules.get(key, alias)
         runtime.module_aliases[alias] = namespace
         runtime.module_alias_paths[alias] = key
 
     if key in runtime.loaded_modules:
         return
+    if standard_module:
+        runtime.native_functions.update(
+            {
+                f"{module_name}.{function_name}": function
+                for function_name, function in standard_module_functions(
+                    module_name,
+                    runtime.clock,
+                    runtime.random_source,
+                    runtime.program_args,
+                ).items()
+            }
+        )
+        runtime.loaded_modules[key] = module_name
+        return
     runtime.import_stack.append(key)
     try:
+        assert module_path is not None
         try:
             lines = module_path.read_text(encoding="utf-8-sig").splitlines()
         except (OSError, UnicodeError) as error:
@@ -786,10 +810,11 @@ def execute_lines(
         index += 1
 
 
-def run_file(filename: str) -> None:
+def run_file(filename: str, program_args: list[str] | None = None) -> None:
     with open(filename, "r", encoding="utf-8-sig") as source_file:
         lines = source_file.readlines()
     runtime = Runtime()
+    runtime.program_args = list(program_args or [])
     runtime.project_root = find_project_root(Path(filename))
     try:
         execute_lines(lines, runtime, filename)

@@ -20,6 +20,7 @@ provide additional installation and operational detail.
 - [Records](#records)
 - [Errors, assertions, and cleanup](#errors-assertions-and-cleanup)
 - [Modules and packages](#modules-and-packages)
+- [Standard library](#standard-library)
 - [Developer tools](#developer-tools)
 - [Language server](#language-server)
 - [Native C interface](#native-c-interface)
@@ -39,7 +40,7 @@ When running from a source checkout, use `py -3 YubaLANG.py` instead of
 | Command | Purpose |
 | --- | --- |
 | `YubaLANG <file.yl>` | Execute a YubaLANG source file. |
-| `YubaLANG run [project-directory]` | Execute the manifest entry point. |
+| `YubaLANG run [project-directory] [-- arguments...]` | Execute the manifest entry point. |
 | `YubaLANG repl` | Start an interactive interpreter session. |
 | `YubaLANG check <file.yl>` | Report static diagnostics without execution. |
 | `YubaLANG fmt [--check\|--write] <file-or-directory>...` | Check or format source. |
@@ -471,10 +472,11 @@ Projects use `yuba.json` and `yuba.lock.json`. Dependencies may refer to local
 paths or Git sources with an optional revision. Lockfile format 2 records
 resolved Git commits and each package's nested dependency graph; both package
 managers write this format, while the importer also reads legacy format-1
-lockfiles for direct dependencies. Imports resolve
-dependencies from the nearest package manifest; declared dependencies take
-precedence over local modules with the same name. Runtime imports validate the
-locked dependencies without network access. Commands include:
+lockfiles for direct dependencies. Bundled `std.*` modules resolve from the
+runtime before package or local lookup. Other imports resolve dependencies
+from the nearest package manifest; declared dependencies take precedence over
+local modules with the same name. Runtime imports validate the locked
+dependencies without network access. Commands include:
 
 ```text
 YubaLANG package init [directory]
@@ -487,12 +489,30 @@ YubaLANG package check
 YubaLANG package remove <name>
 ```
 
-`YubaLANG run [project-directory]` runs the manifest entry point and checks
-installed dependencies when the project declares them. The package tools
+`YubaLANG run [project-directory] [-- arguments...]` runs the manifest entry
+point and checks installed dependencies when the project declares them. The package tools
 support recursive path and Git dependencies, but not a public registry or
 semantic-version range solver. Imported modules execute with the program's
 privileges; dependencies are not sandboxed. See the
 [package guide](package-manager.md).
+
+## Standard library
+
+The bundled runtime provides the reserved `std.*` modules: `std.path`,
+`std.fs`, `std.time`, `std.random`, `std.math`, `std.json`, `std.encoding`,
+`std.process`, and `std.http`. Import a module and call its functions with
+`func call namespace.function`; see the
+[standard-library reference](standard-library.md) for APIs, limits, and
+security behavior. Bundled modules do not appear in manifests or lockfiles and
+are available offline; only `std.http` uses the network.
+
+The API baseline is 1.0 and follows the YubaLANG runtime version. Paths use
+host-platform semantics, text APIs use strict UTF-8, and filesystem writes
+avoid overwriting by default. Process execution uses argument arrays without a
+shell and enforces time and output limits. HTTP uses verified TLS, bounded
+redirects and responses, origin-aware credential stripping, and explicit
+timeouts. All these APIs are synchronous; asynchronous I/O is deferred until
+the language defines concurrency and cancellation semantics.
 
 ## Developer tools
 

@@ -8,6 +8,12 @@ the complete nested graph and is written by both YubaLANG and YubaPKG. YubaPKG
 accepts manifests targeting runtime 1.2 and 1.3. Use either package manager to
 install dependencies and generate a complete format-2 graph.
 
+The bundled `std.*` modules are supplied by the YubaLANG runtime and are not
+package dependencies. They work with YubaLANG and YubaPKG projects without
+manifest entries, lockfile changes, or an install step. Both tools continue to
+manage third-party path and Git dependencies; registry and semantic-version
+range resolution are not implemented.
+
 ## Create a project
 
 ```text
@@ -71,7 +77,12 @@ YubaLANG package update text_utils
 YubaLANG package list
 YubaLANG package check
 YubaLANG package remove text_utils
+YubaLANG run [project-directory] -- first second
 ```
+
+Arguments after `--` are passed to the project entry point and can be read
+with `std.process.args()`. When executing a source file directly, arguments
+after the file name are passed the same way.
 
 `add` and `remove` update the manifest and lockfile. `install` recursively
 locks dependencies declared by dependencies, preserving previously locked Git
@@ -104,8 +115,25 @@ reachable when installing a new or updated Git dependency.
 
 ## Import modules
 
-An import is relative to the importing source file, unless the first name is a
-declared package dependency:
+Bundled standard-library imports use the reserved `std.*` namespace and do not
+need a dependency declaration:
+
+```hl
+import std.path as path
+import std.json as json
+
+define var file_name: string = ""
+func call path.join "config" "app.json" -> file_name
+```
+
+They are provided by the runtime, so they also work after a locked offline
+install and do not add entries to `yuba.lock.json`. The complete module
+inventory and compatibility policy are in the
+[standard-library reference](standard-library.md).
+
+An import matching a bundled `std.*` module resolves to the runtime library
+first. Other imports are relative to the importing source file, unless the
+first name is a declared package dependency:
 
 ```hl
 import helpers
@@ -116,8 +144,8 @@ func call math.add 20 22 -> answer
 text output answer
 ```
 
-For an import, a dependency declared in the nearest package manifest takes
-precedence over a local file with the same first name. Otherwise, `helpers`
+For a non-standard import, a dependency declared in the nearest package
+manifest takes precedence over a local file with the same first name. Otherwise, `helpers`
 resolves to `helpers.yl` or `helpers/main.yl` beside the importing file.
 Dotted imports follow directories, for example `import tools.math` resolves
 to `tools/math.yl` or `tools/math/main.yl`; without an explicit alias its

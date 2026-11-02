@@ -68,6 +68,39 @@ class PackageManagerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "wrong entry\n")
 
+    def test_bundled_standard_library_runs_without_install_or_lockfile(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "sample"
+            write_package(
+                project,
+                "sample",
+                "import std.process as process\n"
+                "define var arguments: list = []\n"
+                "func call process.args -> arguments\n"
+                "text output arguments\n",
+            )
+
+            result = run_cli("run", project, "--", "first", "second", cwd=directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "['first', 'second']\n")
+            self.assertFalse((project / "yuba.lock.json").exists())
+
+            direct = run_cli(project / "main.yl", "direct", cwd=directory)
+            self.assertEqual(direct.returncode, 0, direct.stderr)
+            self.assertEqual(direct.stdout, "['direct']\n")
+
+    def test_standard_library_exit_sets_process_status(self):
+        with tempfile.TemporaryDirectory() as directory:
+            program = Path(directory) / "exit.yl"
+            program.write_text(
+                "import std.process as process\n"
+                "func call process.exit 7\n",
+                encoding="utf-8",
+            )
+            result = run_cli(program, cwd=directory)
+
+        self.assertEqual(result.returncode, 7)
+
     def test_add_path_dependency_lock_import_and_check(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
