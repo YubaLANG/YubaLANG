@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import subprocess
@@ -6,7 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from lang.packages import PackageError, check, install
+from lang.packages import (
+    PackageError,
+    _satisfies_requirement,
+    check,
+    install,
+)
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
@@ -42,6 +48,24 @@ def write_package(root: Path, name: str, source: str) -> None:
 
 
 class PackageManagerTests(unittest.TestCase):
+    def test_registry_lock_requirement_matches_semver_ranges(self):
+        cases = (
+            ("1.4.0", "^1.2.3", True),
+            ("2.0.0", "^1.2.3", False),
+            ("0.2.9", "^0.2.3", True),
+            ("1.2.9", "~1.2.3", True),
+            ("1.3.0", "~1.2.3", False),
+            ("1.7.0", ">=1.2.0, <2.0.0", True),
+            ("1.7.0", "1.x", True),
+            ("1.2.3-beta", ">=1.2.3-beta <1.2.3", True),
+            ("1.2.4-beta", ">=1.2.3-beta <2.0.0", False),
+        )
+        for version, requirement, expected in cases:
+            with self.subTest(version=version, requirement=requirement):
+                self.assertEqual(
+                    _satisfies_requirement(version, requirement), expected
+                )
+
     def test_init_creates_a_runnable_project(self):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "sample"
@@ -141,6 +165,99 @@ class PackageManagerTests(unittest.TestCase):
                 (project / "yuba.json").read_text(encoding="utf-8")
             )
             self.assertEqual(updated_manifest["dependencies"], {})
+
+    def test_imports_and_verifies_yubapkg_registry_lockfile_format_3(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "project"
+            dependency = root / ".yuba" / "packages" / "mylib"
+            write_package(
+                dependency,
+                "mylib",
+                "func define answer\n    return 42\nendfunc\n",
+            )
+            dependency_manifest_path = dependency / "yuba.json"
+            dependency_manifest = json.loads(
+                dependency_manifest_path.read_text(encoding="utf-8")
+            )
+            dependency_manifest["version"] = "1.2.0"
+            dependency_manifest_path.write_text(
+                json.dumps(dependency_manifest), encoding="utf-8"
+            )
+            (dependency / "yuba.lock.json").write_text(
+                json.dumps({"lock_version": 3, "dependencies": {}}),
+                encoding="utf-8",
+            )
+            tree_hash = hashlib.sha256()
+            package_files = sorted(
+                path for path in dependency.rglob("*")
+                if path.is_file() and path.name != "yuba.lock.json"
+            )
+            for path in package_files:
+                relative = path.relative_to(dependency).as_posix().encode("utf-8")
+                contents = path.read_bytes()
+                tree_hash.update(len(relative).to_bytes(8, "big"))
+                tree_hash.update(relative)
+                tree_hash.update(contents)
+
+            archive = b"cached verified package artifact"
+            artifact_hash = hashlib.sha256(archive).hexdigest()
+            artifact_path = root / ".yuba" / "artifacts" / f"{artifact_hash}.tar.gz"
+            artifact_path.parent.mkdir(parents=True)
+            artifact_path.write_bytes(archive)
+            write_package(
+                root,
+                "app",
+                "import mylib\n"
+                "define var result: int = 0\n"
+                "func call mylib.answer -> result\n"
+                "text output result\n",
+            )
+            source = {"registry": "^1.0.0"}
+            resolved = {
+                "version": "1.2.0",
+                "registry": "https://packages.example.invalid",
+                "artifact": "artifacts/mylib-1.2.0.tar.gz",
+                "sha256": artifact_hash,
+                "tree_sha256": tree_hash.hexdigest(),
+            }
+            manifest_path = root / "yuba.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["dependencies"] = {"mylib": source}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            package_manifest = json.loads(
+                (dependency / "yuba.json").read_text(encoding="utf-8")
+            )
+            (root / "yuba.lock.json").write_text(
+                json.dumps(
+                    {
+                        "lock_version": 3,
+                        "dependencies": {
+                            "mylib": {
+                                "source": source,
+                                "resolved": resolved,
+                                "package": {
+                                    field: package_manifest[field]
+                                    for field in ("name", "version", "entry", "yubalang")
+                                },
+                                "dependencies": {},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with self.assertRaisesRegex(PackageError, "must be installed with"):
+                install(root)
+            checked = run_cli("package", "check", cwd=root)
+            self.assertEqual(checked.returncode, 0, checked.stderr)
+            executed = run_cli(root / "main.yl", cwd=root)
+            self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
+            self.assertEqual(executed.stdout, "42\n")
+
+            artifact_path.write_bytes(b"modified")
+            with self.assertRaisesRegex(PackageError, "SHA-256 verification"):
+                check(root)
 
     def test_imports_yubapkg_v1_lockfile_and_upgrades_it(self):
         with tempfile.TemporaryDirectory() as directory:

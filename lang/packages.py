@@ -1,9 +1,11 @@
 """Project manifests, dependency locking, and package-manager commands."""
 
+import hashlib
 import json
 import re
 import subprocess
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +13,18 @@ from typing import Any
 MANIFEST_NAME = "yuba.json"
 LOCK_NAME = "yuba.lock.json"
 LOCK_VERSION = 2
-SUPPORTED_LOCK_VERSIONS = frozenset({1, LOCK_VERSION})
+REGISTRY_LOCK_VERSION = 3
+SUPPORTED_LOCK_VERSIONS = frozenset({1, LOCK_VERSION, REGISTRY_LOCK_VERSION})
 SUPPORTED_YUBALANG = "1.3"
 COMPATIBLE_YUBALANG_VERSIONS = {"1.2", SUPPORTED_YUBALANG}
 PACKAGE_CACHE = Path(".yuba") / "packages"
 _PACKAGE_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]*\Z")
 _COMMIT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+_WINDOWS_RESERVED_NAMES = {
+    "con", "prn", "aux", "nul",
+    *(f"com{number}" for number in range(1, 10)),
+    *(f"lpt{number}" for number in range(1, 10)),
+}
 
 
 class PackageError(ValueError):
@@ -59,25 +67,35 @@ def read_manifest(root: Path) -> dict[str, Any]:
     dependencies = data.setdefault("dependencies", {})
     if not isinstance(dependencies, dict):
         raise PackageError(f"Manifest '{path}' field 'dependencies' must be an object.")
+    portable_names: set[str] = set()
     for name, source in dependencies.items():
         _validate_name(name)
+        if name.casefold() in portable_names:
+            raise PackageError(
+                f"Manifest '{path}' contains dependency names that collide "
+                "on case-insensitive filesystems."
+            )
+        portable_names.add(name.casefold())
         _validate_source(name, source)
     return data
 
 
 def _validate_name(name: str) -> None:
-    if not isinstance(name, str) or not _PACKAGE_NAME.fullmatch(name):
+    if (
+        not isinstance(name, str)
+        or not _PACKAGE_NAME.fullmatch(name)
+        or name.casefold() in _WINDOWS_RESERVED_NAMES
+    ):
         raise PackageError(
             f"Invalid package name '{name}'; use a letter followed by letters, "
-            "digits, underscores, or hyphens."
+            "digits, underscores, or hyphens, excluding reserved Windows names."
         )
 
 
 def _validate_source(name: str, source: Any) -> None:
     if not isinstance(source, dict) or len(source) not in (1, 2):
         raise PackageError(
-            f"Dependency '{name}' must specify either {{'path': ...}} "
-            "or {{'git': ..., 'rev': ...}}."
+            f"Dependency '{name}' must specify a path, Git, or registry source."
         )
     if "path" in source:
         if len(source) != 1 or not isinstance(source["path"], str) or not source["path"]:
@@ -91,10 +109,165 @@ def _validate_source(name: str, source: Any) -> None:
             not isinstance(source["rev"], str) or not source["rev"]
         ):
             raise PackageError(f"Dependency '{name}' has an invalid Git revision.")
+    elif set(source) == {"registry"}:
+        _validate_version_requirement(name, source["registry"])
     else:
         raise PackageError(
-            f"Dependency '{name}' must specify either a 'path' or 'git' source."
+            f"Dependency '{name}' must specify a 'path', 'git', or 'registry' source."
         )
+
+
+_SEMVER_PATTERN = re.compile(
+    r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\Z"
+)
+
+
+def _parse_semver(value: Any) -> tuple[int, int, int, tuple[int | str, ...]]:
+    if not isinstance(value, str):
+        raise ValueError(f"Invalid semantic version: {value!r}")
+    match = _SEMVER_PATTERN.fullmatch(value)
+    if match is None:
+        raise ValueError(f"Invalid semantic version '{value}'.")
+    prerelease: list[int | str] = []
+    for identifier in (match.group(4) or "").split(".") if match.group(4) else ():
+        if identifier.isdigit():
+            if len(identifier) > 1 and identifier.startswith("0"):
+                raise ValueError(f"Invalid semantic version '{value}'.")
+            prerelease.append(int(identifier))
+        else:
+            prerelease.append(identifier)
+    return (
+        int(match.group(1)),
+        int(match.group(2)),
+        int(match.group(3)),
+        tuple(prerelease),
+    )
+
+
+def _compare_semver(
+    left: tuple[int, int, int, tuple[int | str, ...]],
+    right: tuple[int, int, int, tuple[int | str, ...]],
+) -> int:
+    if left[:3] != right[:3]:
+        return (left[:3] > right[:3]) - (left[:3] < right[:3])
+    left_pre, right_pre = left[3], right[3]
+    if not left_pre or not right_pre:
+        if not left_pre and right_pre:
+            return 1
+        if left_pre and not right_pre:
+            return -1
+        return 0
+    for a, b in zip(left_pre, right_pre):
+        if a == b:
+            continue
+        if isinstance(a, int) != isinstance(b, int):
+            return -1 if isinstance(a, int) else 1
+        return (a > b) - (a < b)
+    return (len(left_pre) > len(right_pre)) - (len(left_pre) < len(right_pre))
+
+
+def _validate_version_requirement(name: str, requirement: Any) -> None:
+    if not isinstance(requirement, str) or not requirement.strip():
+        raise PackageError(f"Dependency '{name}' has an invalid registry version requirement.")
+    for token in re.split(r"[\s,]+", requirement.strip()):
+        if token in ("*", "x", "X"):
+            continue
+        match = re.fullmatch(r"(>=|<=|>|<|=|\^|~)?(.+)", token)
+        if match is None:
+            raise PackageError(f"Dependency '{name}' has an invalid version requirement.")
+        raw = match.group(2)
+        if any(part.casefold() in ("x", "*") for part in raw.split(".")):
+            parts = raw.split(".")
+            wildcard = next(
+                (index for index, part in enumerate(parts) if part.casefold() in ("x", "*")),
+                None,
+            )
+            if (
+                wildcard is None
+                or wildcard == 0 and len(parts) != 1
+                or any(part.casefold() not in ("x", "*") for part in parts[wildcard:])
+                or any(not part.isdigit() or part.startswith("0") and len(part) > 1
+                       for part in parts[:wildcard])
+                or len(parts) > 3
+            ):
+                raise PackageError(f"Dependency '{name}' has an invalid version requirement.")
+        else:
+            try:
+                _parse_semver(raw)
+            except ValueError as error:
+                raise PackageError(
+                    f"Dependency '{name}' has an invalid version requirement: {error}"
+                ) from error
+
+
+def _satisfies_requirement(version_text: str, requirement: str) -> bool:
+    version = _parse_semver(version_text)
+    tokens = re.split(r"[\s,]+", requirement.strip())
+    allows_prerelease = False
+    for token in tokens:
+        match = re.fullmatch(r"(?:>=|<=|>|<|=|\^|~)?(.+)", token)
+        if match is None:
+            continue
+        raw = match.group(1)
+        if any(part.casefold() in ("x", "*") for part in raw.split(".")):
+            continue
+        target = _parse_semver(raw)
+        if target[3] and version[:3] == target[:3]:
+            allows_prerelease = True
+            break
+    if version[3] and not allows_prerelease:
+        return False
+    for token in tokens:
+        if token in ("*", "x", "X"):
+            continue
+        match = re.fullmatch(r"(>=|<=|>|<|=|\^|~)?(.+)", token)
+        if match is None:
+            return False
+        operator, raw = match.group(1) or "=", match.group(2)
+        if any(part.casefold() in ("x", "*") for part in raw.split(".")):
+            parts = raw.split(".")
+            index = next(
+                i for i, part in enumerate(parts) if part.casefold() in ("x", "*")
+            )
+            if index == 0:
+                continue
+            lower_parts = [int(part) for part in parts[:index]]
+            lower = tuple(lower_parts + [0] * (3 - index)) + ((),)
+            if index == 1:
+                upper = (lower[0] + 1, 0, 0, ())
+            elif index == 2:
+                upper = (lower[0], lower[1] + 1, 0, ())
+            else:
+                upper = (lower[0], lower[1], lower[2] + 1, ())
+            if _compare_semver(version, lower) < 0 or _compare_semver(version, upper) >= 0:
+                return False
+            continue
+        target = _parse_semver(raw)
+        comparison = _compare_semver(version, target)
+        if operator == "=" and comparison != 0:
+            return False
+        if operator == ">" and comparison <= 0:
+            return False
+        if operator == ">=" and comparison < 0:
+            return False
+        if operator == "<" and comparison >= 0:
+            return False
+        if operator == "<=" and comparison > 0:
+            return False
+        if operator in ("^", "~"):
+            if operator == "~":
+                upper = (target[0], target[1] + 1, 0, ())
+            elif target[0]:
+                upper = (target[0] + 1, 0, 0, ())
+            elif target[1]:
+                upper = (0, target[1] + 1, 0, ())
+            else:
+                upper = (0, 0, target[2] + 1, ())
+            if comparison < 0 or _compare_semver(version, upper) >= 0:
+                return False
+    return True
 
 
 def read_lockfile(root: Path) -> dict[str, Any]:
@@ -133,6 +306,129 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
         )
     except OSError as error:
         raise PackageError(f"Cannot write '{path}': {error}") from error
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as error:
+        raise PackageError(f"Cannot read cached registry artifact '{path}': {error}") from error
+    return digest.hexdigest()
+
+
+def _registry_tree_sha256(root: Path) -> str:
+    digest = hashlib.sha256()
+    files = []
+    for path in root.rglob("*"):
+        relative = path.relative_to(root)
+        if ".yuba" in relative.parts or ".git" in relative.parts:
+            continue
+        if path.is_symlink():
+            raise PackageError(f"Registry package contains a symbolic link: {path}")
+        if path.is_file() and path.name != LOCK_NAME:
+            files.append(path)
+        elif not path.is_dir() and not path.is_file():
+            raise PackageError(f"Registry package contains an unsupported file: {path}")
+    files.sort(
+        key=lambda path: path.relative_to(root).as_posix().encode("utf-8")
+    )
+    for path in files:
+        relative = path.relative_to(root).as_posix().encode("utf-8")
+        digest.update(len(relative).to_bytes(8, "big"))
+        digest.update(relative)
+        try:
+            with path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as error:
+            raise PackageError(f"Cannot read registry package file '{path}': {error}") from error
+    return digest.hexdigest()
+
+
+def _check_registry_dependency(
+    root: Path,
+    name: str,
+    source: dict[str, Any],
+    resolved: dict[str, Any],
+) -> Path:
+    endpoint = resolved.get("registry")
+    artifact = resolved.get("artifact")
+    version = resolved.get("version")
+    artifact_digest = resolved.get("sha256")
+    tree_digest = resolved.get("tree_sha256")
+    if (
+        not isinstance(endpoint, str)
+        or not isinstance(artifact, str)
+        or not isinstance(version, str)
+        or not isinstance(artifact_digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", artifact_digest)
+        or not isinstance(tree_digest, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", tree_digest)
+    ):
+        raise PackageError(f"Registry lock entry for '{name}' has invalid identity.")
+    try:
+        parsed_endpoint = urllib.parse.urlsplit(endpoint)
+        parsed_endpoint.port
+    except ValueError as error:
+        raise PackageError(f"Registry URL for '{name}' is invalid: {error}") from error
+    if (
+        parsed_endpoint.scheme not in ("https", "http")
+        or not parsed_endpoint.hostname
+        or parsed_endpoint.username is not None
+        or parsed_endpoint.password is not None
+        or parsed_endpoint.query
+        or parsed_endpoint.fragment
+        or (
+            parsed_endpoint.scheme != "https"
+            and parsed_endpoint.hostname not in ("localhost", "127.0.0.1", "::1")
+        )
+    ):
+        raise PackageError(f"Registry URL for '{name}' is not a trusted HTTPS URL.")
+    try:
+        artifact_url = urllib.parse.urljoin(endpoint.rstrip("/") + "/", artifact)
+        parsed_artifact = urllib.parse.urlsplit(artifact_url)
+        parsed_artifact.port
+    except ValueError as error:
+        raise PackageError(f"Artifact URL for '{name}' is invalid: {error}") from error
+    if (
+        (parsed_artifact.scheme, parsed_artifact.hostname, parsed_artifact.port)
+        != (parsed_endpoint.scheme, parsed_endpoint.hostname, parsed_endpoint.port)
+        or parsed_artifact.username is not None
+        or parsed_artifact.password is not None
+        or parsed_artifact.query
+        or parsed_artifact.fragment
+    ):
+        raise PackageError(f"Artifact URL for '{name}' is outside its trusted registry.")
+    try:
+        if not _satisfies_requirement(version, source["registry"]):
+            raise PackageError(
+                f"Locked version {version} of '{name}' does not satisfy "
+                f"'{source['registry']}'."
+            )
+    except ValueError as error:
+        raise PackageError(f"Registry lock version for '{name}' is invalid: {error}") from error
+    archive = root / ".yuba" / "artifacts" / f"{artifact_digest}.tar.gz"
+    if not archive.is_file():
+        raise PackageError(
+            f"Registry artifact for '{name}' is not cached; run "
+            "'yubapkg package install'."
+        )
+    if _sha256_file(archive) != artifact_digest:
+        raise PackageError(f"Cached registry artifact for '{name}' failed SHA-256 verification.")
+    dependency_root = root / ".yuba" / "packages" / name
+    if not dependency_root.is_dir() or _registry_tree_sha256(dependency_root) != tree_digest:
+        raise PackageError(
+            f"Installed registry package '{name}' was modified or is missing; "
+            "run 'yubapkg package install'."
+        )
+    manifest = read_manifest(dependency_root)
+    if manifest["name"] != name or manifest["version"] != version:
+        raise PackageError(f"Installed registry package '{name}' has the wrong identity.")
+    resolve_entry(dependency_root, manifest)
+    return dependency_root
 
 
 def _git(root: Path, *arguments: str) -> str:
@@ -188,6 +484,12 @@ def _dependency_lock(
             "source": source,
             "resolved": {"path": relative_path},
         }
+
+    if "registry" in source:
+        raise PackageError(
+            "Registry dependencies must be installed with "
+            "'yubapkg package install'."
+        )
 
     url = source["git"]
     old_source = old_entry.get("source") if isinstance(old_entry, dict) else None
@@ -324,7 +626,10 @@ def _check(
         raise PackageError(f"Dependency cycle detected: {cycle}.")
     package_stack = [*package_stack, package_name]
     lock = read_lockfile(root)
-    has_nested_graph = lock["lock_version"] == LOCK_VERSION
+    has_nested_graph = lock["lock_version"] in (
+        LOCK_VERSION,
+        REGISTRY_LOCK_VERSION,
+    )
     manifest_dependencies = manifest["dependencies"]
     locked_dependencies = lock["dependencies"]
     if (
@@ -371,6 +676,15 @@ def _check(
             dependency_root = (root / resolved["path"]).resolve()
             if not dependency_root.is_dir():
                 raise PackageError(f"Path dependency '{name}' is missing: {dependency_root}")
+        elif "registry" in source:
+            if lock["lock_version"] != REGISTRY_LOCK_VERSION:
+                raise PackageError(
+                    "Registry dependencies require lockfile format 3; run "
+                    "'yubapkg package install'."
+                )
+            dependency_root = _check_registry_dependency(
+                root, name, source, resolved
+            )
         else:
             if (
                 not isinstance(resolved.get("rev"), str)
@@ -561,7 +875,9 @@ def run_package_command(arguments: list[str]) -> int:
             manifest = read_manifest(root)
             for name in sorted(manifest["dependencies"]):
                 source = manifest["dependencies"][name]
-                detail = source.get("path", source.get("git", ""))
+                detail = source.get(
+                    "path", source.get("git", source.get("registry", ""))
+                )
                 print(f"{name}: {detail}")
         elif command == "check":
             if args:
@@ -585,6 +901,8 @@ def resolve_dependency(root: Path, name: str) -> Path | None:
     resolved = entry["resolved"]
     if "path" in resolved:
         return (root / resolved["path"]).resolve()
+    if "registry" in resolved:
+        return (root / ".yuba" / "packages" / name).resolve()
     return (root / PACKAGE_CACHE / name).resolve()
 
 

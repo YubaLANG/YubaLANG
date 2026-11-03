@@ -500,7 +500,8 @@ privileges; dependencies are not sandboxed. See the
 
 The bundled runtime provides the reserved `std.*` modules: `std.path`,
 `std.fs`, `std.time`, `std.random`, `std.math`, `std.json`, `std.encoding`,
-`std.process`, and `std.http`. Import a module and call its functions with
+`std.process`, `std.http`, `std.csv`, `std.url`, and `std.hash`. Import a
+module and call its functions with
 `func call namespace.function`; see the
 [standard-library reference](standard-library.md) for APIs, limits, and
 security behavior. Bundled modules do not appear in manifests or lockfiles and
@@ -513,6 +514,9 @@ shell and enforces time and output limits. HTTP uses verified TLS, bounded
 redirects and responses, origin-aware credential stripping, and explicit
 timeouts. All these APIs are synchronous; asynchronous I/O is deferred until
 the language defines concurrency and cancellation semantics.
+CSV parsing/formatting, URL and query-string helpers, and SHA-256 text, byte,
+and file utilities are also available through `std.csv`, `std.url`, and
+`std.hash`.
 
 ## Developer tools
 

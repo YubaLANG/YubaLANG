@@ -1,9 +1,10 @@
 # Multi-module project tutorial
 
 This tutorial builds and tests a project with a local package dependency. It
-uses the YubaLANG 1.3 package interface and lockfile format 2. YubaPKG supports
-the same lockfile format and accepts both YubaLANG 1.2 and 1.3 manifests, so
-either package manager can install this project and its nested dependencies.
+uses the YubaLANG 1.3 package interface and lockfile format 2. YubaPKG accepts
+both YubaLANG 1.2 and 1.3 manifests and writes format 3, which the runtime can
+also read. Either package manager can install this path-based project and its
+nested dependencies.
 
 ## Create the library and app
 

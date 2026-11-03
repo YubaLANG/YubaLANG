@@ -1,0 +1,18 @@
+import std.csv as csv
+import std.url as url
+import std.hash as hash
+
+define var rows: list = []
+define var query: dict = {}
+define var encoded: string = ""
+define var digest: string = ""
+
+func call csv.loads "name,score\nAda,42\n" -> rows
+func call url.parse_query "tag=lang&tag=standard&empty=" -> query
+func call url.encode_component "Yuba language" -> encoded
+func call hash.sha256 "abc" -> digest
+
+text output rows
+text output query
+text output encoded
+text output digest

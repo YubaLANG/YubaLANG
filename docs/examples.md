@@ -15,6 +15,7 @@ paths in an example resolve from that directory.
 | [File I/O](../examples/file_io.yl) | Opening, reading, and closing a text file. |
 | [Error handling](../examples/error_handling.yl) | `throw`, `catch`, and `finally`. |
 | [Standard library](../examples/standard_library.yl) | Importing path, JSON, and math modules. |
+| [Standard-library data](../examples/standard_library_data.yl) | CSV, URL, and SHA-256 utilities. |
 | [Modules](../examples/modules/main.yl) | Importing and calling a namespaced local module. |
 | [Testing](../examples/testing/smoke.yl) | A minimal output fixture for `YubaLANG test`. |
 | [C ABI](../examples/ffi_add.yl) | Calling a native C function. See the [C ABI guide](c-abi.md) to build the library for your platform. |

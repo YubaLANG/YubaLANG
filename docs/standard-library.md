@@ -31,6 +31,9 @@ the standard library before local or package modules.
 | `std.encoding` | `utf8_encode`, `utf8_decode`, `base64_encode`, `base64_decode` |
 | `std.process` | `args`, `env`, `exit`, `run` |
 | `std.http` | `request` |
+| `std.csv` | `loads`, `dumps` |
+| `std.url` | `parse`, `join`, `encode_component`, `decode_component`, `parse_query`, `build_query` |
+| `std.hash` | `sha256`, `sha256_file` |
 
 `func call namespace.function ... -> destination` stores the result in an
 existing variable. Use `bytes` for binary values, `dict` for JSON objects and
@@ -89,6 +92,24 @@ sets and bytes) produce explicit errors.
 `std.encoding.utf8_encode(text)` and `utf8_decode(bytes)` use strict UTF-8.
 `base64_encode(bytes)` returns ASCII text, and `base64_decode(text)` validates
 the input rather than accepting malformed data.
+
+`std.csv.loads(text, delimiter=",")` returns rows of string cells and parses
+quoted fields and embedded newlines according to CSV rules. `dumps(rows,
+delimiter=",")` accepts rows of strings and emits deterministic LF-terminated
+CSV, quoting cells when required. Delimiters must be a single non-newline
+character.
+
+`std.url.parse(url)` returns a dictionary with `scheme`, `host`, `port`,
+`path`, `query`, `fragment`, `username`, and `is_absolute` fields. Passwords
+are intentionally not returned. `join(base, reference)` resolves relative URL
+references. Component encoding uses UTF-8 percent-encoding; query helpers
+represent repeated query keys as lists of strings, preserve blank values, and
+reject non-string query values.
+
+`std.hash.sha256(value)` returns a lowercase hexadecimal SHA-256 digest of
+UTF-8 text or raw bytes. `sha256_file(path)` reads a file incrementally and
+returns the digest without loading the complete file into memory. SHA-256 is
+for integrity and identification, not password storage or signatures.
 
 ## Process APIs
 

@@ -17,13 +17,13 @@ programs and imports installed packages.
 - [x] Ensure imports resolve to the exact package versions and locations in
   the lockfile; report missing, modified, or inconsistent installations
   with actionable diagnostics.
-- [ ] Preserve local module, path dependency, and Git dependency behavior
+- [x] Preserve local module, path dependency, and Git dependency behavior
   while introducing registry-installed packages.
 - [x] Define deterministic import precedence, package namespace rules,
   duplicate-name behavior, and cycle diagnostics across dependency graphs.
-- [ ] Add cross-repository tests that use YubaPKG to install a package graph,
+- [x] Add cross-repository tests that use YubaPKG to install a package graph,
   then run imports with YubaLANG both online and offline.
-- [ ] Document the end-to-end workflow for installing YubaLANG and YubaPKG,
+- [x] Document the end-to-end workflow for installing YubaLANG and YubaPKG,
   creating a project, adding dependencies, running, and reproducing an
   install from a lockfile.
 

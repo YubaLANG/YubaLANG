@@ -2,7 +2,10 @@
 
 import base64
 import binascii
+import csv
 import datetime as datetime_module
+import hashlib
+import io
 import json
 import math
 import os
@@ -29,6 +32,9 @@ STANDARD_MODULES = frozenset(
         "std.encoding",
         "std.process",
         "std.http",
+        "std.csv",
+        "std.url",
+        "std.hash",
     }
 )
 
@@ -356,6 +362,142 @@ def _encoding_functions() -> dict[str, Callable[..., Any]]:
     }
 
 
+def _csv_functions() -> dict[str, Callable[..., Any]]:
+    def loads(value: str, delimiter: str = ",") -> list[list[str]]:
+        text = _string(value, "CSV input")
+        separator = _string(delimiter, "Delimiter")
+        if len(separator) != 1 or separator in "\r\n":
+            raise ValueError("CSV delimiter must be one non-newline character.")
+        return [
+            row
+            for row in csv.reader(
+                io.StringIO(text, newline=""),
+                delimiter=separator,
+                strict=True,
+            )
+        ]
+
+    def dumps(rows: list[list[str]], delimiter: str = ",") -> str:
+        separator = _string(delimiter, "Delimiter")
+        if len(separator) != 1 or separator in "\r\n":
+            raise ValueError("CSV delimiter must be one non-newline character.")
+        if not isinstance(rows, (list, tuple)):
+            raise TypeError("CSV rows must be a list or tuple of rows.")
+        stream = io.StringIO(newline="")
+        writer = csv.writer(stream, delimiter=separator, lineterminator="\n")
+        for row in rows:
+            if not isinstance(row, (list, tuple)) or any(
+                not isinstance(cell, str) for cell in row
+            ):
+                raise TypeError("Each CSV row must be a list or tuple of strings.")
+            writer.writerow(row)
+        return stream.getvalue()
+
+    return {"loads": loads, "dumps": dumps}
+
+
+def _url_functions() -> dict[str, Callable[..., Any]]:
+    def parse(value: str) -> dict[str, Any]:
+        parsed = urllib.parse.urlsplit(_string(value, "URL"))
+        try:
+            port = parsed.port
+        except ValueError as error:
+            raise ValueError(f"Invalid URL port: {error}") from error
+        return {
+            "scheme": parsed.scheme,
+            "host": parsed.hostname,
+            "port": port,
+            "path": parsed.path,
+            "query": parsed.query,
+            "fragment": parsed.fragment,
+            "username": parsed.username,
+            "is_absolute": bool(parsed.scheme and parsed.netloc),
+        }
+
+    def join(base: str, reference: str) -> str:
+        return urllib.parse.urljoin(
+            _string(base, "Base URL"),
+            _string(reference, "URL reference"),
+        )
+
+    def encode_component(value: str) -> str:
+        return urllib.parse.quote(_string(value, "URL component"), safe="")
+
+    def decode_component(value: str) -> str:
+        try:
+            return urllib.parse.unquote(
+                _string(value, "URL component"),
+                encoding="utf-8",
+                errors="strict",
+            )
+        except UnicodeDecodeError as error:
+            raise ValueError(f"URL component is not valid UTF-8: {error}") from error
+
+    def parse_query(value: str) -> dict[str, list[str]]:
+        pairs = urllib.parse.parse_qsl(
+            _string(value, "Query string"),
+            keep_blank_values=True,
+            strict_parsing=False,
+            encoding="utf-8",
+            errors="strict",
+        )
+        result: dict[str, list[str]] = {}
+        for key, item in pairs:
+            result.setdefault(key, []).append(item)
+        return result
+
+    def build_query(values: dict[str, Any]) -> str:
+        if not isinstance(values, dict):
+            raise TypeError("Query parameters must be a dictionary.")
+        normalized: dict[str, str | list[str]] = {}
+        for key, value in values.items():
+            if not isinstance(key, str):
+                raise TypeError("Query parameter names must be strings.")
+            if isinstance(value, str):
+                normalized[key] = value
+            elif isinstance(value, (list, tuple)) and all(
+                isinstance(item, str) for item in value
+            ):
+                normalized[key] = list(value)
+            else:
+                raise TypeError(
+                    "Query parameter values must be strings or lists of strings."
+                )
+        return urllib.parse.urlencode(normalized, doseq=True)
+
+    return {
+        "parse": parse,
+        "join": join,
+        "encode_component": encode_component,
+        "decode_component": decode_component,
+        "parse_query": parse_query,
+        "build_query": build_query,
+    }
+
+
+def _hash_functions() -> dict[str, Callable[..., Any]]:
+    def sha256(value: str | bytes | bytearray) -> str:
+        if isinstance(value, str):
+            data = value.encode("utf-8")
+        elif isinstance(value, (bytes, bytearray)):
+            data = bytes(value)
+        else:
+            raise TypeError("Hash input must be a string, bytes, or bytearray.")
+        return hashlib.sha256(data).hexdigest()
+
+    def sha256_file(path: str) -> str:
+        digest = hashlib.sha256()
+        try:
+            with Path(_string(path, "Path")).open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as error:
+            raise OSError(f"Cannot hash file '{path}': {error}") from error
+        return digest.hexdigest()
+
+    return {"sha256": sha256, "sha256_file": sha256_file}
+
+
 def _process_functions(program_args: list[str]) -> dict[str, Callable[..., Any]]:
     def args() -> list[str]:
         return list(program_args)
@@ -608,5 +750,8 @@ def standard_module_functions(
         "std.encoding": _encoding_functions,
         "std.process": lambda: _process_functions(program_args),
         "std.http": _http_functions,
+        "std.csv": _csv_functions,
+        "std.url": _url_functions,
+        "std.hash": _hash_functions,
     }
     return modules[name]()

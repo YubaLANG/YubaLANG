@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import http.server
 import io
 import json
@@ -61,6 +62,60 @@ class StandardLibraryTests(unittest.TestCase):
                 Runtime(),
             )
         self.assertIn("Invalid JSON numeric constant 'NaN'", output.getvalue())
+
+    def test_csv_url_and_sha256_helpers(self):
+        runtime = self.execute(
+            r'''
+            import std.csv as csv
+            import std.url as url
+            import std.hash as hash
+            define var rows: list = []
+            define var serialized: string = ""
+            define var parsed: dict = {}
+            define var query: dict = {}
+            define var component: string = ""
+            define var decoded: string = ""
+            define var digest: string = ""
+            func call csv.loads '"name","value"\n"Ada, Lovelace","42"\n' -> rows
+            func call csv.dumps rows -> serialized
+            func call url.parse "https://example.test:8443/a?q=1#top" -> parsed
+            func call url.parse_query "tag=one&tag=two&empty=" -> query
+            func call url.encode_component "Yuba language" -> component
+            func call url.decode_component component -> decoded
+            func call hash.sha256 "abc" -> digest
+            '''
+        )
+
+        self.assertEqual(
+            runtime.require_var("rows")["value"],
+            [["name", "value"], ["Ada, Lovelace", "42"]],
+        )
+        self.assertEqual(
+            runtime.require_var("serialized")["value"],
+            'name,value\n"Ada, Lovelace",42\n',
+        )
+        self.assertEqual(
+            runtime.require_var("parsed")["value"],
+            {
+                "scheme": "https",
+                "host": "example.test",
+                "port": 8443,
+                "path": "/a",
+                "query": "q=1",
+                "fragment": "top",
+                "username": None,
+                "is_absolute": True,
+            },
+        )
+        self.assertEqual(
+            runtime.require_var("query")["value"],
+            {"tag": ["one", "two"], "empty": [""]},
+        )
+        self.assertEqual(runtime.require_var("decoded")["value"], "Yuba language")
+        self.assertEqual(
+            runtime.require_var("digest")["value"],
+            hashlib.sha256(b"abc").hexdigest(),
+        )
 
     def test_time_and_random_are_injectable_for_deterministic_tests(self):
         runtime = Runtime(

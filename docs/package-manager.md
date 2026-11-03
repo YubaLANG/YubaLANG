@@ -3,16 +3,18 @@
 YubaLANG projects use a dependency-free JSON manifest named `yuba.json` and a
 generated `yuba.lock.json`. Both files should be checked into version control.
 YubaLANG 1.3 accepts manifests targeting runtime 1.2 or 1.3 and reads lockfile
-formats 1 and 2. Format 1 records direct dependencies only; format 2 records
-the complete nested graph and is written by both YubaLANG and YubaPKG. YubaPKG
-accepts manifests targeting runtime 1.2 and 1.3. Use either package manager to
-install dependencies and generate a complete format-2 graph.
+formats 1, 2, and 3. Format 1 records direct dependencies only; format 2
+records the complete path/Git graph; format 3 adds exact registry releases,
+artifact hashes, and the complete graph. YubaPKG accepts manifests targeting
+runtime 1.2 and 1.3 and writes format 3. The YubaLANG package commands continue
+to install path/Git sources; use YubaPKG to install or update registry
+dependencies.
 
 The bundled `std.*` modules are supplied by the YubaLANG runtime and are not
 package dependencies. They work with YubaLANG and YubaPKG projects without
 manifest entries, lockfile changes, or an install step. Both tools continue to
-manage third-party path and Git dependencies; registry and semantic-version
-range resolution are not implemented.
+manage path and Git dependencies. Registry packages are managed by YubaPKG;
+the YubaLANG runtime can verify and import their installed format-3 lockfiles.
 
 ## Create a project
 
@@ -53,6 +55,27 @@ release also supports both manifest versions.
 }
 ```
 
+Registry dependencies use a semantic-version range and are resolved by
+YubaPKG against the configured trusted registry:
+
+```json
+{
+  "name": "sample",
+  "version": "0.1.0",
+  "entry": "main.yl",
+  "yubalang": "1.3",
+  "dependencies": {
+    "text_utils": { "registry": "^1.2.0" }
+  }
+}
+```
+
+Set `YUBAPKG_REGISTRY_URL` to the trusted HTTPS base URL before using a
+registry dependency. The package-manager implementation currently supports one
+registry endpoint per resolution, and does not provide publishing,
+authentication, search, or private registries. See the
+[YubaPKG registry protocol](https://github.com/YubaLANG/YubaPKG/blob/main/docs/registry.md).
+
 The path is relative to the project manifest. Each dependency directory must
 contain its own `yuba.json`; its `name` must match the dependency key. The
 `entry` field identifies the module loaded when a package is imported by name.
@@ -80,6 +103,18 @@ YubaLANG package remove text_utils
 YubaLANG run [project-directory] -- first second
 ```
 
+YubaPKG additionally supports:
+
+```text
+yubapkg package add text_utils --registry "^1.2.0"
+yubapkg package install --offline
+yubapkg package install --frozen
+```
+
+`--offline` installs from an existing lock and local caches only.
+`--frozen` validates the manifest, lock, and installed packages without
+resolving, downloading, or writing.
+
 Arguments after `--` are passed to the project entry point and can be read
 with `std.process.args()`. When executing a source file directly, arguments
 after the file name are passed the same way.
@@ -95,23 +130,18 @@ Path dependencies always point at the current contents of the specified
 directory. Removing a Git dependency updates the manifest and lockfile; its
 unused checkout may remain in `.yuba/packages`.
 
-Lockfile format 2 is deterministic JSON. Every dependency entry records its
-source, resolved path or Git commit, package identity (`name`, `version`,
-`entry`, and `yubalang`), and a nested `dependencies` object containing that
-package's complete locked dependency graph. The same graph is written to each
-dependency's own lockfile so imports from that package can resolve
-dependencies relative to its manifest. Path dependencies remain live
-directories and are not content-addressed; their location and declared
-identity are locked, while local source changes remain visible. Git packages
-are pinned to their exact commit. `package check` verifies manifests, nested
-lockfiles, package identities and entry files, and locked Git checkouts,
-including modified tracked files and untracked source files (excluding the
-manager's generated lockfile and nested cache). It does not contact Git
-remotes or modify files. Legacy format-1 lockfiles are accepted for direct
-dependency checks and imports, but do not capture nested graphs or package
-identities; run `package install` to upgrade them to format 2. Both package
-managers write format 2 and lock the complete graph. Git must be installed and
-reachable when installing a new or updated Git dependency.
+Lockfiles are deterministic JSON. Format 2 records path/Git dependencies;
+format 3 records registry version, origin, artifact URL, SHA-256, installed
+tree digest, package identity, and a nested `dependencies` object. The same
+graph is written to each dependency's own lockfile so imports resolve relative
+to that package's manifest. Path dependencies remain live directories and are
+not content-addressed; Git packages are pinned to exact commits; registry
+packages are verified against cached artifacts and their installed tree.
+`package check` is offline and verifies lock consistency and installed
+packages. YubaLANG runtime imports accept registry lock entries but do not
+perform registry resolution or downloads. Use `yubapkg package install` to
+update the lock and install artifacts. Format-1 and format-2 locks are upgraded
+by YubaPKG; YubaLANG's own path/Git installer continues to write format 2.
 
 ## Import modules
 
@@ -151,7 +181,8 @@ Dotted imports follow directories, for example `import tools.math` resolves
 to `tools/math.yl` or `tools/math/main.yl`; without an explicit alias its
 namespace is `math`. For a package import, the manifest's `entry` is used.
 Dependencies of imported packages resolve from that package's own manifest
-and locked graph, including transitive path and Git packages. Imports are
+and locked graph, including transitive path, Git, and installed registry
+packages. Imports are
 loaded once per run. Dependency cycles are reported during installation or
 validation; module-import cycles are errors at runtime.
 
@@ -169,6 +200,6 @@ lock graph and do not access the network; run `package install` beforehand.
 Within one runtime, rebinding a namespace to a different module is an error.
 Importing a module executes its top-level commands. Imported code runs with
 the program's privileges; YubaLANG does not sandbox modules or dependencies,
-so only use source code from packages you trust. The package tools support
-direct path and Git sources, including recursively declared dependency
-graphs; there is not yet a public registry or semantic-version range solver.
+so only use source code from packages you trust. YubaPKG supports path, Git, and static registry sources, including recursive
+graphs and semantic-version ranges. A public registry service and publishing
+workflow are not provided.
