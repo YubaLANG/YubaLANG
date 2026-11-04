@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 from unittest.mock import patch
 
 from lang.lsp import LanguageServer, _read_message, analyze_document, serve
@@ -445,9 +447,14 @@ class LanguageServerTests(unittest.TestCase):
                         },
                     },
                 })
-                self.assertEqual(
-                    definition["result"][0]["uri"],
-                    (dependency / "main.yl").as_uri(),
+                definition_path = Path(
+                    url2pathname(
+                        unquote(urlparse(definition["result"][0]["uri"]).path)
+                    )
+                )
+                self.assertTrue(
+                    definition_path.samefile(dependency / "main.yl"),
+                    f"Definition URI resolved to {definition_path}",
                 )
                 hover, _ = server.handle({
                     "jsonrpc": "2.0",
