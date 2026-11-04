@@ -85,9 +85,9 @@ checks globally.
 ## Build pipeline
 
 Push a version tag such as `v1.3.0` to build and publish the four platform
-archives. The release workflow pins Python and the PyInstaller build
-dependencies, fixes the source timestamp and Python hash seed, verifies that
-two builds of each executable on the same runner are byte-identical, and
+archives. The release workflow selects Python 3.12 and pins the PyInstaller
+build dependencies, fixes the source timestamp and Python hash seed, verifies
+that two builds of each executable on the same runner are byte-identical, and
 normalizes archive metadata. It attaches SHA-256 checksums and the matching
 versioned release-notes file to the GitHub release. The reproducibility check
 covers repeated builds on the same runner image; it does not claim that builds

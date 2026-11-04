@@ -34,7 +34,7 @@ jobs:
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12.16"
+          python-version: "3.12"
       - name: Run test suite
         run: python -m unittest discover -s tests
       - name: Install build dependency
