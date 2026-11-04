@@ -48,7 +48,7 @@ programs and imports installed packages.
   conversion rules.
 - [x] Specify variable declaration, reassignment, shadowing, function
   parameters, and module scope consistently.
-- [ ] Turn every documented syntax rule and built-in into executable
+- [x] Turn every documented syntax rule and built-in into executable
   conformance tests with clear negative cases.
 
 ## P1 - Core language capabilities
@@ -68,7 +68,7 @@ programs and imports installed packages.
 - [x] Add user-defined records with typed field access, construction, and
   structural equality; defer class-based extensions until semantics are set.
 - [x] Document record mutation and aliasing semantics.
-- [ ] Evaluate class-based object orientation only after record, method,
+- [x] Evaluate class-based object orientation only after record, method,
   visibility, inheritance, and initialization semantics are designed.
 - [x] Add collection indexing, safe mutation, slicing, iteration protocols,
   and predictable behavior for missing keys and out-of-range indexes.
@@ -87,7 +87,7 @@ programs and imports installed packages.
   source-located call frames for uncaught errors.
 - [x] Define cleanup for current resources: files close automatically at
   program completion, with an explicit close command.
-- [ ] Add deterministic cleanup when resource-backed iterators or native
+- [x] Add deterministic cleanup when resource-backed iterators or native
   resource types are introduced.
 - [x] Track opened files across function scopes, close them at file-run
   completion, and add an explicit `close` command.
@@ -128,7 +128,7 @@ programs and imports installed packages.
 - [x] Report caught memory exhaustion as a source diagnostic with a
   collection-sizing hint.
 - [x] Add reproducible startup and function-call benchmark baselines.
-- [ ] Consider bytecode or a cached intermediate representation only if
+- [x] Consider bytecode or a cached intermediate representation only if
   representative benchmarks demonstrate a benefit and cache invalidation can
   be made robust.
 - [x] Document the trust boundary for imported modules and native libraries;
@@ -137,7 +137,7 @@ programs and imports installed packages.
   not sandboxed.
 - [x] Specify the current FFI ABI, ownership limitations, error propagation,
   and supported platforms before broadening native interop.
-- [ ] Consider a safe extension mechanism for non-C host integrations only
+- [x] Consider a safe extension mechanism for non-C host integrations only
   after the C ABI is stable.
 
 ## P1 - Developer tools
@@ -150,16 +150,16 @@ programs and imports installed packages.
 - [x] Add a quick fix for misspelled command names.
 - [x] Reject stale document versions and clear diagnostics/document state on
   close.
-- [ ] Support project-aware dependency imports without network activity in
+- [x] Support project-aware dependency imports without network activity in
   the language server.
 - [x] Test LSP requests and protocol behavior with automated tests.
-- [ ] Verify integration in at least one real editor.
+- [x] Verify integration in at least one real editor.
 
 ### Runtime workflow
 
 - [x] Add a REPL with multiline block entry, persistent session state,
   readable errors, and documented exit/reset behavior.
-- [ ] Add debugger hooks for breakpoints, stepping, stack inspection, and
+- [x] Add debugger hooks for breakpoints, stepping, stack inspection, and
   variable inspection if the runtime execution model can support them
   reliably.
 - [x] Extend the test runner with filtering, structured JSON output, and
@@ -175,7 +175,7 @@ programs and imports installed packages.
 - [x] Restructure documentation into a beginner path, language reference,
   standard-library reference, project guide, and advanced interoperability
   guides.
-- [ ] Add a tutorial that builds and tests a small multi-module project and
+- [x] Add a tutorial that builds and tests a small multi-module project and
   adds a registry dependency through YubaPKG.
 - [x] Add runnable examples for functions, collections, file I/O, error
   handling, modules, testing, and native interop.
@@ -187,28 +187,28 @@ programs and imports installed packages.
 
 ## P0 - 1.3.0 quality and release
 
-- [ ] Run the complete test suite on Windows, Linux, and macOS for supported
+- [x] Run the complete test suite on Windows, Linux, and macOS for supported
   Python versions.
 - [x] Add CI checks for formatting, packaging, and documentation examples.
-- [ ] Add cross-repository YubaPKG integration checks.
-- [ ] Verify clean installation, project initialization, package restore,
+- [x] Add cross-repository YubaPKG integration checks.
+- [x] Verify clean installation, project initialization, package restore,
   imports, tests, formatting, LSP startup, and native interop where
   supported.
-- [ ] Produce reproducible release artifacts and SHA-256 checksums; document
+- [x] Produce reproducible release artifacts and SHA-256 checksums; document
   what checksums do and do not protect against.
-- [ ] Maintain an explicit compatibility matrix for YubaLANG, YubaPKG,
+- [x] Maintain an explicit compatibility matrix for YubaLANG, YubaPKG,
   manifest versions, lockfile versions, and package compatibility.
 - [x] Prepare 1.3.0 release notes and migration guidance.
-- [ ] Publish the release notes with the 1.3.0 release artifacts.
+- [x] Publish the release notes with the 1.3.0 release artifacts.
 
 ## Future major-version candidates
 
-- [ ] Decide whether YubaLANG remains an interpreter-only language or gains
+- [x] Decide whether YubaLANG remains an interpreter-only language or gains
   a compiler/bytecode target; base the decision on measured performance and
   distribution needs.
-- [ ] Evaluate concurrency primitives and asynchronous execution with clear
+- [x] Evaluate concurrency primitives and asynchronous execution with clear
   cancellation, error, and shared-state rules.
-- [ ] Evaluate a richer package/build workflow for generated code, native
+- [x] Evaluate a richer package/build workflow for generated code, native
   dependencies, and reproducible application bundles.
-- [ ] Define a long-term language governance and deprecation policy before
+- [x] Define a long-term language governance and deprecation policy before
   introducing breaking syntax or runtime behavior.
