@@ -27,6 +27,10 @@ def _read_frames(stream):
     return messages
 
 
+def _path_from_file_uri(uri):
+    return Path(url2pathname(unquote(urlparse(uri).path)))
+
+
 class LanguageServerTests(unittest.TestCase):
     def test_initialize_advertises_editor_features(self):
         server = LanguageServer()
@@ -447,11 +451,7 @@ class LanguageServerTests(unittest.TestCase):
                         },
                     },
                 })
-                definition_path = Path(
-                    url2pathname(
-                        unquote(urlparse(definition["result"][0]["uri"]).path)
-                    )
-                )
+                definition_path = _path_from_file_uri(definition["result"][0]["uri"])
                 self.assertTrue(
                     definition_path.samefile(dependency / "main.yl"),
                     f"Definition URI resolved to {definition_path}",
@@ -479,9 +479,12 @@ class LanguageServerTests(unittest.TestCase):
                     "params": {"query": "answer"},
                 })
                 self.assertEqual(symbols["result"][0]["name"], "answer")
-                self.assertEqual(
-                    symbols["result"][0]["location"]["uri"],
-                    (dependency / "main.yl").as_uri(),
+                symbol_path = _path_from_file_uri(
+                    symbols["result"][0]["location"]["uri"]
+                )
+                self.assertTrue(
+                    symbol_path.samefile(dependency / "main.yl"),
+                    f"Workspace symbol URI resolved to {symbol_path}",
                 )
 
     def test_project_import_resolution_failures_are_reported(self):
