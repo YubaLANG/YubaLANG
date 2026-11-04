@@ -21,8 +21,8 @@ irm https://raw.githubusercontent.com/yubalang/yubalang/main/installers/windows/
 
 The installers download the latest GitHub release, verify the SHA-256 checksum,
 and install or replace the executable. To install a specific tag, download the
-corresponding installer script and pass `--version v1.2.0` on macOS/Linux or
-`-Version v1.2.0` on Windows. Re-running the installer updates an existing
+corresponding installer script and pass `--version v1.3.0` on macOS/Linux or
+`-Version v1.3.0` on Windows. Re-running the installer updates an existing
 installation.
 
 The Unix installer installs to `~/.local/bin` by default. If that directory is
@@ -84,13 +84,25 @@ checks globally.
 
 ## Build pipeline
 
-Push a version tag such as `v1.2.0` to build and publish the four platform
-archives. The build workflow runs the test suite on each release platform, bundles
-Python with PyInstaller, and attaches SHA-256 checksums to the GitHub release.
-Builds run on GitHub-hosted Windows, Ubuntu 22.04, macOS Intel, and Apple
-Silicon runners.
+Push a version tag such as `v1.3.0` to build and publish the four platform
+archives. The release workflow pins Python and the PyInstaller build
+dependencies, fixes the source timestamp and Python hash seed, verifies that
+two builds of each executable on the same runner are byte-identical, and
+normalizes archive metadata. It attaches SHA-256 checksums and the matching
+versioned release-notes file to the GitHub release. The reproducibility check
+covers repeated builds on the same runner image; it does not claim that builds
+from different operating systems produce identical bytes.
+
+SHA-256 checksums detect accidental corruption and can compare a downloaded
+artifact with the published checksum. They do not authenticate the publisher
+or prove that the source and build process were trustworthy. Because releases
+are unsigned, an attacker able to replace both an artifact and its checksum
+can make them agree; checksums are not a digital signature or provenance
+attestation.
 
 Pull requests and branch pushes also run the test suite on Windows, Linux,
 and macOS with Python 3.10 through 3.14. CI checks formatting for runnable
 examples and test fixtures, and builds and smoke-tests a standalone executable
-on Ubuntu.
+on Ubuntu. The packaged-executable smoke test initializes a project, restores
+and checks its lockfile, imports a local module, runs the project and test
+fixtures, and verifies formatting and LSP startup.

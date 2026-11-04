@@ -48,7 +48,7 @@ programs and imports installed packages.
   conversion rules.
 - [x] Specify variable declaration, reassignment, shadowing, function
   parameters, and module scope consistently.
-- [x] Turn every documented syntax rule and built-in into executable
+- [ ] Turn every documented syntax rule and built-in into executable
   conformance tests with clear negative cases.
 
 ## P1 - Core language capabilities
@@ -153,7 +153,7 @@ programs and imports installed packages.
 - [x] Support project-aware dependency imports without network activity in
   the language server.
 - [x] Test LSP requests and protocol behavior with automated tests.
-- [x] Verify integration in at least one real editor.
+- [ ] Verify integration in at least one real editor.
 
 ### Runtime workflow
 
@@ -187,19 +187,19 @@ programs and imports installed packages.
 
 ## P0 - 1.3.0 quality and release
 
-- [x] Run the complete test suite on Windows, Linux, and macOS for supported
+- [ ] Run the complete test suite on Windows, Linux, and macOS for supported
   Python versions.
 - [x] Add CI checks for formatting, packaging, and documentation examples.
 - [x] Add cross-repository YubaPKG integration checks.
-- [x] Verify clean installation, project initialization, package restore,
+- [ ] Verify clean installation, project initialization, package restore,
   imports, tests, formatting, LSP startup, and native interop where
   supported.
-- [x] Produce reproducible release artifacts and SHA-256 checksums; document
+- [ ] Produce reproducible release artifacts and SHA-256 checksums; document
   what checksums do and do not protect against.
 - [x] Maintain an explicit compatibility matrix for YubaLANG, YubaPKG,
   manifest versions, lockfile versions, and package compatibility.
 - [x] Prepare 1.3.0 release notes and migration guidance.
-- [x] Publish the release notes with the 1.3.0 release artifacts.
+- [ ] Publish the release notes with the 1.3.0 release artifacts.
 
 ## Future major-version candidates
 

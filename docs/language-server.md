@@ -23,10 +23,15 @@ client for arbitrary language servers.
 - Open, full-document and ranged change, and close notifications.
 - Syntax diagnostics for malformed quoting, invalid or unknown commands,
   invalid declarations, and unclosed or mismatched blocks.
+- Project import diagnostics using the nearest manifest and checked lockfile;
+  dependency resolution is local and does not access the network.
 - Go to definition for declared variables, function parameters, and functions.
+- Go to definition, hover, completion, signature help, and workspace symbols
+  for public functions in imported project dependencies.
 - Hover documentation for language commands, built-ins, and types.
-- Completion for commands, types, and symbols in open documents.
-- Signature help for user-defined functions.
+- Completion for commands, types, and symbols in open documents and
+  namespaced project dependency functions.
+- Signature help for user-defined functions and imported project functions.
 - Find references and rename for symbols in open documents.
 - Document and workspace symbol search.
 - Quick fixes for misspelled command names.
@@ -34,10 +39,12 @@ client for arbitrary language servers.
 
 Diagnostics and symbol lookup are static and intentionally do not execute
 programs. Editors may send full or ranged document changes with monotonically
-increasing versions. Rename, references, and workspace symbols are limited to
-open documents; unopened files are not searched or changed. Completion and
-signature help are best-effort suggestions, not a complete semantic type
-engine.
+increasing versions. Rename and references are limited to open documents;
+unopened files are not searched or changed. Project imports are resolved
+against the nearest project's checked lockfile and installed package contents.
+Unavailable imports produce diagnostics, and resolution never downloads
+packages. Dependency symbols are read-only. Completion and signature help are
+best-effort suggestions, not a complete semantic type engine.
 
 ## Try it
 

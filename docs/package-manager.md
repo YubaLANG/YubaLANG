@@ -10,6 +10,22 @@ runtime 1.2 and 1.3 and writes format 3. The YubaLANG package commands continue
 to install path/Git sources; use YubaPKG to install or update registry
 dependencies.
 
+## Compatibility matrix
+
+This table describes the compatibility contract exercised for the 1.3
+release and YubaPKG 0.1.0:
+
+| Tool/runtime | Manifest targets accepted | Lock formats read | Format written | Package behavior |
+| --- | --- | --- | --- | --- |
+| YubaLANG 1.3 | 1.2, 1.3 | 1, 2, 3 | 2 for its path/Git commands | Imports installed registry packages from a format-3 graph offline; does not resolve or download them. |
+| YubaPKG 0.1.0 | 1.2, 1.3 | 1, 2, 3 | 3 | Resolves path, Git, and registry dependencies; install upgrades format-1/2 locks. Registry releases must declare support for the requested YubaLANG runtime. |
+| YubaLANG 1.2 | 1.2 | Not guaranteed by this release | Legacy behavior | YubaLANG 1.3 syntax and format-3 registry imports are outside its compatibility contract. |
+
+Accepting a manifest version does not make newer language syntax available in
+an older runtime. Package metadata is the registry publisher's compatibility
+claim; the runtime verifies the locked package identity and content, not that
+the package source actually obeys the declared language-version target.
+
 The bundled `std.*` modules are supplied by the YubaLANG runtime and are not
 package dependencies. They work with YubaLANG and YubaPKG projects without
 manifest entries, lockfile changes, or an install step. Both tools continue to

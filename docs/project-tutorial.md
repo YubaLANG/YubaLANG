@@ -1,10 +1,10 @@
 # Multi-module project tutorial
 
-This tutorial builds and tests a project with a local package dependency. It
-uses the YubaLANG 1.3 package interface and lockfile format 2. YubaPKG accepts
-both YubaLANG 1.2 and 1.3 manifests and writes format 3, which the runtime can
-also read. Either package manager can install this path-based project and its
-nested dependencies.
+This tutorial builds and tests a project with a local package dependency, then
+adds a registry dependency through YubaPKG. YubaLANG 1.3 accepts manifests
+targeting runtime 1.2 or 1.3 and reads lockfile formats 1, 2, and 3. YubaPKG
+accepts both manifest versions and writes format 3, which YubaLANG 1.3 can
+read offline.
 
 ## Create the library and app
 
@@ -75,4 +75,47 @@ Then run `YubaLANG test tests/cases`. The runner compares exact standard
 output, including line breaks.
 
 YubaLANG recursively locks path and Git dependencies declared by packages.
-Registry installation and semantic-version range selection are not supported.
+## Add a registry dependency with YubaPKG
+
+YubaLANG manages local path and Git dependencies. Registry packages are
+resolved and installed by YubaPKG. No public registry is operated by this
+project; use a package name and API that exist on your trusted registry.
+
+Install YubaPKG separately, then configure its trusted HTTPS registry URL:
+
+```powershell
+python -m pip install -e path\to\YubaPKG
+$env:YUBAPKG_REGISTRY_URL = "https://packages.example.org"
+```
+
+In `hello_app`, add a package published by that registry. This example assumes
+the package is named `text_utils` and exports `greet`:
+
+```text
+yubapkg package add text_utils --registry "^1.2.0"
+yubapkg package install
+yubapkg package check
+```
+
+Change `hello_app/main.yl` to import and call that package's documented API,
+then run and test the project as before:
+
+```hl
+import text_utils
+func call text_utils.greet "Ada"
+```
+
+The lockfile records the exact registry release, hashes, and complete
+transitive dependency graph. After the first install, restore without network
+access and validate the committed lock:
+
+```text
+yubapkg package install --offline
+yubapkg package install --frozen
+YubaLANG run .
+YubaLANG test tests/cases
+```
+
+YubaLANG imports the installed lock graph without contacting the registry.
+See the [package guide](package-manager.md) for registry configuration,
+compatibility, and security details.

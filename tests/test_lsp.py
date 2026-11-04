@@ -1,10 +1,15 @@
 import io
 import json
+from pathlib import Path
+import socket
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from lang.lsp import LanguageServer, _read_message, analyze_document, serve
+from lang.packages import install
 
 
 def _frame(message):
@@ -338,6 +343,167 @@ class LanguageServerTests(unittest.TestCase):
             "params": {"textDocument": {"uri": uri}, "position": {"line": 5, "character": 2}},
         })
         self.assertIn("prints a value", hover["result"]["contents"]["value"])
+
+    def test_project_dependency_language_features_resolve_offline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = root / "project"
+            dependency = root / "widgets"
+            project.mkdir()
+            dependency.mkdir()
+            (dependency / "yuba.json").write_text(
+                json.dumps({
+                    "name": "widgets",
+                    "version": "0.1.0",
+                    "entry": "main.yl",
+                    "yubalang": "1.3",
+                    "dependencies": {},
+                }),
+                encoding="utf-8",
+            )
+            (dependency / "main.yl").write_text(
+                "func define answer value:int -> int\n"
+                "    return value\n"
+                "endfunc\n"
+                "func private define hidden\n"
+                "endfunc\n",
+                encoding="utf-8",
+            )
+            (project / "yuba.json").write_text(
+                json.dumps({
+                    "name": "app",
+                    "version": "0.1.0",
+                    "entry": "main.yl",
+                    "yubalang": "1.3",
+                    "dependencies": {"widgets": {"path": "../widgets"}},
+                }),
+                encoding="utf-8",
+            )
+            install(project)
+            source = "import widgets as kit\nfunc call kit.answer "
+            (project / "main.yl").write_text(source, encoding="utf-8")
+            uri = (project / "main.yl").as_uri()
+            server = LanguageServer()
+            _, published = server.handle({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {"textDocument": {"uri": uri, "text": source}},
+            })
+            self.assertEqual(published[0]["params"]["diagnostics"], [])
+
+            with (
+                patch.object(
+                    socket, "create_connection",
+                    side_effect=AssertionError("LSP attempted network access"),
+                ),
+                patch.object(
+                    socket, "getaddrinfo",
+                    side_effect=AssertionError("LSP attempted network access"),
+                ),
+            ):
+                completion, _ = server.handle({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "textDocument/completion",
+                    "params": {
+                        "textDocument": {"uri": uri},
+                        "position": {
+                            "line": 1,
+                            "character": len("func call kit."),
+                        },
+                    },
+                })
+                self.assertEqual(
+                    {item["label"] for item in completion["result"]["items"]},
+                    {"answer"},
+                )
+                signature, _ = server.handle({
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "textDocument/signatureHelp",
+                    "params": {
+                        "textDocument": {"uri": uri},
+                        "position": {
+                            "line": 1,
+                            "character": len("func call kit.answer "),
+                        },
+                    },
+                })
+                self.assertEqual(
+                    signature["result"]["signatures"][0]["label"],
+                    "answer(value:int) -> int",
+                )
+                definition, _ = server.handle({
+                    "jsonrpc": "2.0",
+                    "id": 3,
+                    "method": "textDocument/definition",
+                    "params": {
+                        "textDocument": {"uri": uri},
+                        "position": {
+                            "line": 1,
+                            "character": len("func call kit.") + 2,
+                        },
+                    },
+                })
+                self.assertEqual(
+                    definition["result"][0]["uri"],
+                    (dependency / "main.yl").as_uri(),
+                )
+                hover, _ = server.handle({
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "textDocument/hover",
+                    "params": {
+                        "textDocument": {"uri": uri},
+                        "position": {
+                            "line": 1,
+                            "character": len("func call kit.") + 2,
+                        },
+                    },
+                })
+                self.assertIn(
+                    "Imported function",
+                    hover["result"]["contents"]["value"],
+                )
+                symbols, _ = server.handle({
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "workspace/symbol",
+                    "params": {"query": "answer"},
+                })
+                self.assertEqual(symbols["result"][0]["name"], "answer")
+                self.assertEqual(
+                    symbols["result"][0]["location"]["uri"],
+                    (dependency / "main.yl").as_uri(),
+                )
+
+    def test_project_import_resolution_failures_are_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / "yuba.json").write_text(
+                json.dumps({
+                    "name": "app",
+                    "version": "0.1.0",
+                    "entry": "main.yl",
+                    "yubalang": "1.3",
+                    "dependencies": {},
+                }),
+                encoding="utf-8",
+            )
+            uri = (project / "main.yl").as_uri()
+            _, published = LanguageServer().handle({
+                "jsonrpc": "2.0",
+                "method": "textDocument/didOpen",
+                "params": {
+                    "textDocument": {
+                        "uri": uri,
+                        "text": "import missing_module\n",
+                    },
+                },
+            })
+            diagnostic = published[0]["params"]["diagnostics"][0]
+            self.assertEqual(diagnostic["code"], "import-resolution")
+            self.assertIn("missing_module", diagnostic["message"])
 
     def test_document_sync_publishes_and_clears_diagnostics(self):
         server = LanguageServer()

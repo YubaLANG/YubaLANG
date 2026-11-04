@@ -4,7 +4,7 @@ from io import IOBase
 from pathlib import Path
 import random
 import time
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Protocol
 from weakref import WeakValueDictionary
 
 from .type_system import FunctionReference, TypeSpec, format_type, is_known_type, parse_type
@@ -33,6 +33,13 @@ class LanguageException(ValueError):
     def __init__(self, value: Any) -> None:
         super().__init__(f"Uncaught language exception: {value}")
         self.value = value
+
+
+class DebugHook(Protocol):
+    def on_line(
+        self, runtime: "Runtime", source_name: str, line_number: int
+    ) -> None:
+        ...
 
 
 @dataclass
@@ -87,6 +94,7 @@ class Runtime:
     exception_capture_depth: int = 0
     call_stack: list[tuple[str, str, int]] = field(default_factory=list)
     current_location: tuple[str, int] = ("<memory>", 1)
+    debugger: DebugHook | None = None
 
     def resolve_function(self, name: str) -> str | None:
         if "." in name:

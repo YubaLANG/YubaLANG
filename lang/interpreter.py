@@ -513,10 +513,13 @@ def execute_lines(
             index += 1
             continue
 
+        runtime.current_location = (source_name, statement_line)
+        if runtime.debugger is not None:
+            runtime.debugger.on_line(runtime, source_name, statement_line)
+
         try:
             node = parse_line(source_line, source_name, statement_line)
             parts = list(node.tokens) if node is not None else []
-            runtime.current_location = (source_name, statement_line)
             command = parts[0] if parts else ""
             if command == "return":
                 value = (

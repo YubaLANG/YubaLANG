@@ -2,13 +2,18 @@
 
 import json
 import difflib
+from pathlib import Path
 import re
 import sys
 from typing import Any, BinaryIO
+from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
-from .interpreter import _split
+from .interpreter import _module_file, _split
 from .expressions import parse_expression
-from .runtime import TYPES
+from .packages import PackageError, find_project_root
+from .runtime import Runtime, TYPES
+from .standard_library import is_standard_module
 from .typecheck import check_types
 
 
@@ -599,6 +604,107 @@ def _apply_change(source: str, change: dict[str, Any]) -> str:
     return source[:start_offset] + change["text"] + source[end_offset:]
 
 
+def _file_path(uri: str) -> Path | None:
+    parsed = urlparse(uri)
+    if parsed.scheme != "file":
+        return None
+    return Path(url2pathname(unquote(parsed.path)))
+
+
+def _public_function_symbols(source: str) -> dict[str, dict[str, int]]:
+    result: dict[str, dict[str, int]] = {}
+    for line_number, line in enumerate(source.splitlines()):
+        try:
+            parts = _split(line.strip())
+        except SyntaxError:
+            continue
+        if parts[:3] == ["func", "private", "define"]:
+            continue
+        definition = _function_definition(parts)
+        if definition is None:
+            continue
+        name = definition[0]
+        location = next(
+            (
+                (word, character)
+                for word, character in _identifier_positions(line)
+                if word == name
+            ),
+            None,
+        )
+        if location is not None:
+            result[name] = {"line": line_number, "character": location[1]}
+    return result
+
+
+def _qualified_alias(
+    source: str, line_number: int, character: int
+) -> str | None:
+    lines = source.splitlines()
+    if not 0 <= line_number < len(lines):
+        return None
+    prefix = lines[line_number][:_character_offset(lines[line_number], character)]
+    match = re.search(r"\b([A-Za-z_]\w*)\.[A-Za-z_]\w*$", prefix)
+    return match.group(1) if match is not None else None
+
+
+def _project_modules(
+    uri: str, source: str
+) -> tuple[dict[str, tuple[Path, str]], list[dict[str, Any]]]:
+    document_path = _file_path(uri)
+    if document_path is None:
+        return {}, []
+    project_root = find_project_root(document_path)
+    if project_root is None:
+        return {}, []
+
+    runtime = Runtime(project_root=project_root)
+    modules: dict[str, tuple[Path, str]] = {}
+    diagnostics = []
+    for line_number, line in enumerate(source.splitlines()):
+        try:
+            parts = _split(line.strip())
+        except SyntaxError:
+            continue
+        if (
+            len(parts) not in (2, 4)
+            or parts[0] != "import"
+            or (len(parts) == 4 and parts[2] != "as")
+            or not all(part.isidentifier() for part in parts[1].split("."))
+        ):
+            continue
+        module_name = parts[1]
+        if is_standard_module(module_name):
+            continue
+        alias = parts[3] if len(parts) == 4 else module_name.split(".")[-1]
+        try:
+            module_path = _module_file(module_name, runtime, str(document_path))
+            module_source = module_path.read_text(encoding="utf-8-sig")
+        except (PackageError, OSError, UnicodeError, ValueError) as error:
+            diagnostics.append(
+                _diagnostic(
+                    line_number,
+                    line,
+                    f"Cannot resolve import '{module_name}': {error}",
+                    "import-resolution",
+                )
+            )
+            continue
+        previous = modules.get(alias)
+        if previous is not None and previous[0] != module_path:
+            diagnostics.append(
+                _diagnostic(
+                    line_number,
+                    line,
+                    f"Import namespace '{alias}' refers to more than one module.",
+                    "import-resolution",
+                )
+            )
+            continue
+        modules[alias] = (module_path, module_source)
+    return modules, diagnostics
+
+
 class LanguageServer:
     def __init__(self) -> None:
         self.documents: dict[str, str] = {}
@@ -690,6 +796,29 @@ class LanguageServer:
                         start + _utf16_length(word[0]),
                     ),
                 }]
+            elif source is not None and word:
+                position = params["position"]
+                alias = _qualified_alias(
+                    source, position["line"], position["character"]
+                )
+                modules, _ = _project_modules(uri, source)
+                module = modules.get(alias) if alias is not None else None
+                if module is not None:
+                    module_path, module_source = module
+                    imported_definition = _public_function_symbols(
+                        module_source
+                    ).get(word[0])
+                    if imported_definition is not None:
+                        definition_line = imported_definition["line"]
+                        start = imported_definition["character"]
+                        result = [{
+                            "uri": module_path.as_uri(),
+                            "range": _range(
+                                definition_line,
+                                start,
+                                start + _utf16_length(word[0]),
+                            ),
+                        }]
         elif method == "textDocument/hover":
             uri = params["textDocument"]["uri"]
             source = self.documents.get(uri)
@@ -704,6 +833,20 @@ class LanguageServer:
                     definition = _symbols(source).get(word[0]) if source is not None else None
                     if definition is not None:
                         hover_text = f"YubaLANG symbol **`{word[0]}`**."
+                    elif source is not None:
+                        position = params["position"]
+                        alias = _qualified_alias(
+                            source, position["line"], position["character"]
+                        )
+                        modules, _ = _project_modules(uri, source)
+                        module = modules.get(alias) if alias is not None else None
+                        if module is not None and (
+                            word[0] in _public_function_symbols(module[1])
+                        ):
+                            hover_text = (
+                                f"Imported function **`{word[0]}`** from the "
+                                f"project dependency `{alias}`."
+                            )
                 if hover_text:
                     result = {
                         "contents": {"kind": "markdown", "value": hover_text},
@@ -713,17 +856,38 @@ class LanguageServer:
             uri = params["textDocument"]["uri"]
             source = self.documents.get(uri, "")
             line_number = params["position"]["line"]
-            line = source.splitlines()[line_number] if line_number < len(source.splitlines()) else ""
+            lines = source.splitlines()
+            line = lines[line_number] if 0 <= line_number < len(lines) else ""
             column = _character_offset(line, params["position"]["character"])
             prefix_match = re.search(r"[A-Za-z_]\w*$", line[:column])
             prefix = prefix_match.group() if prefix_match else ""
-            candidates = set(_COMMANDS) | set(TYPES) | set(_symbols(source))
-            for source_text in self.documents.values():
-                candidates.update(_symbols(source_text))
-                candidates.update(
-                    match.group(1)
-                    for match in re.finditer(r"(?m)^\\s*import\\s+[\\w.]+\\s+as\\s+(\\w+)", source_text)
-                )
+            modules, _ = _project_modules(uri, source)
+            namespace_match = re.search(
+                r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)?$", line[:column]
+            )
+            module = (
+                modules.get(namespace_match.group(1))
+                if namespace_match is not None else None
+            )
+            if module is not None:
+                candidates = set(_public_function_symbols(module[1]))
+                prefix = namespace_match.group(2) or ""
+            else:
+                candidates = set(_COMMANDS) | set(TYPES) | set(_symbols(source))
+                for alias, (_, module_source) in modules.items():
+                    candidates.update(
+                        f"{alias}.{name}"
+                        for name in _public_function_symbols(module_source)
+                    )
+                for source_text in self.documents.values():
+                    candidates.update(_symbols(source_text))
+                    candidates.update(
+                        match.group(1)
+                        for match in re.finditer(
+                            r"(?m)^\s*import\s+[\w.]+\s+as\s+(\w+)",
+                            source_text,
+                        )
+                    )
             result = {
                 "isIncomplete": False,
                 "items": [
@@ -742,8 +906,19 @@ class LanguageServer:
             call = re.search(r"\bfunc\s+call\s+([\w.]+)(?:\s+(.*))?$", prefix)
             result = None
             if call:
-                function_name = call.group(1).split(".")[-1]
+                qualified_name = call.group(1)
+                function_name = qualified_name.split(".")[-1]
                 signature = _function_signatures(source).get(function_name)
+                if "." in qualified_name:
+                    alias = qualified_name.split(".", 1)[0]
+                    module = _project_modules(uri, source)[0].get(alias)
+                    if (
+                        module is not None
+                        and function_name in _public_function_symbols(module[1])
+                    ):
+                        signature = _function_signatures(module[1]).get(
+                            function_name
+                        )
                 if signature is not None:
                     parameter_names, return_type = signature
                     label = f"{function_name}({', '.join(parameter_names)})"
@@ -818,6 +993,29 @@ class LanguageServer:
                 for symbol in _document_symbols(source, uri)
                 if query in symbol["name"].casefold()
             ]
+            for uri, source in self.documents.items():
+                modules, _ = _project_modules(uri, source)
+                for alias, (module_path, module_source) in modules.items():
+                    for name, definition in _public_function_symbols(
+                        module_source
+                    ).items():
+                        if query not in name.casefold():
+                            continue
+                        line_number = definition["line"]
+                        start = definition["character"]
+                        result.append({
+                            "name": name,
+                            "kind": 12,
+                            "location": {
+                                "uri": module_path.as_uri(),
+                                "range": _range(
+                                    line_number,
+                                    start,
+                                    start + _utf16_length(name),
+                                ),
+                            },
+                            "containerName": alias,
+                        })
         elif method == "textDocument/codeAction":
             uri = params["textDocument"]["uri"]
             source = self.documents.get(uri, "")
@@ -871,10 +1069,19 @@ class LanguageServer:
 
     @staticmethod
     def _publish(uri: str, text: str) -> dict[str, Any]:
+        diagnostics = analyze_document(text)
+        _, import_diagnostics = _project_modules(uri, text)
+        diagnostics.extend(import_diagnostics)
+        diagnostics.sort(
+            key=lambda item: (
+                item["range"]["start"]["line"],
+                item["range"]["start"]["character"],
+            )
+        )
         return {
             "jsonrpc": "2.0",
             "method": "textDocument/publishDiagnostics",
-            "params": {"uri": uri, "diagnostics": analyze_document(text)},
+            "params": {"uri": uri, "diagnostics": diagnostics},
         }
 
 

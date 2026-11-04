@@ -49,7 +49,8 @@ When running from a source checkout, use `py -3 YubaLANG.py` instead of
 | `YubaLANG --lsp` | Start the stdio language server. |
 
 The [installation guide](install.md) documents supported release platforms,
-installers, and executable distribution.
+installers, executable distribution, and its smoke-test coverage for project
+initialization, restore, imports, tests, formatting, and LSP startup.
 New users can start with the [getting-started guide](getting-started.md).
 
 ## Source syntax
@@ -82,10 +83,12 @@ keywords are not reserved solely by their spelling.
 
 Values are literals or variable references. Supported literal forms include
 numbers, quoted strings, booleans, `none`, and list, dictionary, set, and tuple
-literals. A literal may contain variable references. Unary `+` and `-` apply
-to numeric values; arithmetic commands such as `arith add` produce output
-rather than an expression value. YubaLANG has no general operator expressions
-or line continuation.
+literals. A literal may contain variable references. Expression-bearing
+commands support parentheses, unary `+`, `-`, and `not`, arithmetic
+`+`, `-`, `*`, `/`, `//`, `%`, and `**`, comparisons, and boolean `and`/`or`
+with defined precedence. Expression syntax does not include arbitrary
+function calls; arithmetic commands such as `arith add` remain available and
+produce output rather than an expression value.
 
 ## Variables and types
 
@@ -528,6 +531,16 @@ accepts `exit` or `quit` to leave. Enter `reset` to close tracked files and
 start with a fresh runtime. End-of-file discards an incomplete block with a
 notice.
 
+### Debugger hooks
+
+The host API in `lang.debugger` provides line breakpoints, continue, step into,
+step over, and step out. Attach a `Debugger` to a `Runtime`; its synchronous
+callback receives a `DebugEvent` before each stopped statement, including the
+source location, call stack, function depth, and a read-only shallow snapshot
+of visible variables. A callback can block to pause execution and select the
+next action through the debugger methods. There is no interactive debugger
+command-line frontend.
+
 ### Test runner
 
 Tests are `.yl` files paired with sibling `.expected.txt` files. Their exact
@@ -565,10 +578,12 @@ Start with `YubaLANG --lsp` (or `py -3 YubaLANG.py --lsp` in a checkout). The
 stdio LSP provides diagnostics, go-to-definition, hover, completion, signature
 help, references, rename, document/workspace symbols, and typo quick fixes.
 It supports full and ranged document changes, rejects stale versions, and
-clears state on close. The server does not execute source. Symbol search,
-references, and rename are limited to documents open in the server; it does
-not index unopened files or resolve project dependencies. VS Code requires a
-generic LSP client extension. See [language server setup](language-server.md).
+clears state on close. In projects, it resolves imports from the nearest
+manifest and checked lockfile without network access, and provides read-only
+language features for public dependency functions. The server does not execute
+source; references and rename remain limited to open documents and it does not
+index unopened project files. VS Code requires a generic LSP client extension.
+See [language server setup](language-server.md).
 
 ## Native C interface
 
@@ -595,15 +610,43 @@ trusted libraries. See the [C ABI guide](c-abi.md).
   collection literals and collection-producing built-ins create a new outer
   container without deep-copying its elements, so a tuple may contain shared
   mutable values.
-- There is no general expression language, static inference is conservative,
-  and dynamic values may evade static diagnostics while remaining subject to
-  runtime checks.
-- There is no bytecode compiler, project build command, debugger, coverage
-  instrumentation, or filesystem-wide LSP index.
+- Expressions are intentionally limited to value expressions, arithmetic,
+  comparisons, and boolean operators; function calls are statement commands.
+  Static inference is conservative, and dynamic values may evade static
+  diagnostics while remaining subject to runtime checks.
+- There is no bytecode compiler, project build command, interactive debugger
+  frontend, coverage instrumentation, or filesystem-wide LSP index.
 - The runtime has no general deterministic resource protocol for iterators or
   future native resource wrappers. Files are explicitly tracked and closed.
 - The C bridge is intentionally narrow and does not transfer pointers or
   ownership.
+
+## Versioning, governance, and future directions
+
+Language and runtime changes follow these rules:
+
+- Propose a syntax or runtime change with its motivation, alternatives,
+  compatibility impact, and tests before implementation. Accepted behavior
+  must be documented in the versioned reference and the master reference.
+- Patch releases fix defects without intentionally changing documented
+  behavior. Minor releases add compatible syntax, APIs, and tools. Breaking
+  syntax or runtime changes require a major version and migration guidance.
+- A deprecation must name its replacement, be documented in migration notes,
+  and remain available for at least one subsequent minor release before
+  removal.
+- Changes to the YubaLANG/YubaPKG boundary must update the compatibility
+  matrix and include cross-tool integration coverage.
+
+The 1.3 design remains interpreter-only: the measured workloads do not show
+that a bytecode target is needed, and distribution is handled by standalone
+executables. Concurrency and asynchronous execution remain deferred until
+cancellation, error propagation, and shared-state rules are designed.
+Records are the current data-modeling feature; class methods, inheritance, and
+initialization semantics are not defined. The current package workflow does
+not build generated code or native dependencies into application bundles;
+that scope should be evaluated against concrete distribution needs. The C
+ABI remains the only native extension boundary; no non-C plugin mechanism is
+defined.
 
 For an introductory path, begin with the [getting-started guide](getting-started.md)
 and [documentation guide](index.md), then

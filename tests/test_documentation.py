@@ -1,9 +1,12 @@
 import json
+import re
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+from lang.syntax import parse_line
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
@@ -34,6 +37,25 @@ def run_cli(*arguments, cwd=REPOSITORY_ROOT):
 
 
 class DocumentationTests(unittest.TestCase):
+    def test_documented_language_snippets_parse(self):
+        language_fence = re.compile(
+            r"^```hl[ \t]*\r?\n(.*?)^```[ \t]*$",
+            re.MULTILINE | re.DOTALL,
+        )
+        for documentation in sorted((REPOSITORY_ROOT / "docs").glob("*.md")):
+            text = documentation.read_text(encoding="utf-8")
+            for example_number, match in enumerate(language_fence.finditer(text), 1):
+                first_line = text.count("\n", 0, match.start(1)) + 1
+                for offset, line in enumerate(match.group(1).splitlines()):
+                    if not line.strip() or line.lstrip().startswith("#"):
+                        continue
+                    with self.subTest(
+                        documentation=documentation.name,
+                        example=example_number,
+                        line=first_line + offset,
+                    ):
+                        parse_line(line, str(documentation), first_line + offset)
+
     def test_runnable_documented_examples_pass_the_output_runner(self):
         for relative_path in DOCUMENTED_EXAMPLES:
             example = REPOSITORY_ROOT / "examples" / relative_path
