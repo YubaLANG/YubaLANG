@@ -48,7 +48,7 @@ best-effort suggestions, not a complete semantic type engine.
 
 ## Try it
 
-Open [`examples\functions.yl`](../examples/functions.yl) in an LSP-capable
+Open [`examples\functions.yl`](../../examples/functions.yl) in an LSP-capable
 editor configured to launch the command above. Hover over `func`, `return`,
 or `filter`; try completion, signature help, references, and rename on
 `is_positive` or `values`.

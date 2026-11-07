@@ -175,7 +175,7 @@ func call path.join "config" "app.json" -> file_name
 They are provided by the runtime, so they also work after a locked offline
 install and do not add entries to `yuba.lock.json`. The complete module
 inventory and compatibility policy are in the
-[standard-library reference](standard-library.md).
+[standard-library reference](../features/standard-library.md).
 
 An import matching a bundled `std.*` module resolves to the runtime library
 first. Other imports are relative to the importing source file, unless the

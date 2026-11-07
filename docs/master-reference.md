@@ -48,10 +48,10 @@ When running from a source checkout, use `py -3 YubaLANG.py` instead of
 | `YubaLANG package <subcommand>` | Manage project dependencies. |
 | `YubaLANG --lsp` | Start the stdio language server. |
 
-The [installation guide](install.md) documents supported release platforms,
+The [installation guide](setup/install.md) documents supported release platforms,
 installers, executable distribution, and its smoke-test coverage for project
 initialization, restore, imports, tests, formatting, and LSP startup.
-New users can start with the [getting-started guide](getting-started.md).
+New users can start with the [getting-started guide](guides/getting-started.md).
 
 ## Source syntax
 
@@ -205,7 +205,7 @@ result; the legacy four-operand comparison form is also supported.
 Unless noted, a command that writes a result requires an existing destination
 variable of a compatible declared type. `iter` creates its iterator
 destination if it does not already exist.
-The [standard-library policy](standard-library.md) defines API stability and
+The [standard-library policy](features/standard-library.md) defines API stability and
 the current built-in command organization.
 
 ### Output, input, conversion, and comparison
@@ -310,7 +310,7 @@ Built-in unary functions accepted by `map` and `filter` include `abs`, `bool`,
 `chr`, `int`, `float`, `str`, `ord`, `round`, `ascii`, `repr`, and `len`.
 User-defined functions must return a value when used as a `map` callback.
 
-See the [built-in reference](builtins.md) for additional examples and
+See the [built-in reference](features/builtins.md) for additional examples and
 type-specific details.
 
 ## Control flow
@@ -479,7 +479,7 @@ YubaLANG's package commands write format 2 for path/Git dependencies; YubaPKG
 writes format 3 and resolves path, Git, and registry dependencies. YubaLANG
 can validate and import already-installed registry packages from a format-3
 lockfile without network access, but does not resolve or download them. See
-the [package guide](package-manager.md#compatibility-matrix) for the complete
+the [package guide](projects/package-manager.md#compatibility-matrix) for the complete
 compatibility matrix.
 
 Bundled `std.*` modules resolve from the runtime before package or local
@@ -504,7 +504,7 @@ point and checks installed dependencies when the project declares them.
 YubaLANG resolves path and Git dependencies; registry resolution and
 installation are handled by YubaPKG. Imported modules execute with the
 program's privileges; dependencies are not sandboxed. See the
-[package guide](package-manager.md) for registry setup and package-manager
+[package guide](projects/package-manager.md) for registry setup and package-manager
 details.
 
 ## Standard library
@@ -514,7 +514,7 @@ The bundled runtime provides the reserved `std.*` modules: `std.path`,
 `std.process`, `std.http`, `std.csv`, `std.url`, and `std.hash`. Import a
 module and call its functions with
 `func call namespace.function`; see the
-[standard-library reference](standard-library.md) for APIs, limits, and
+[standard-library reference](features/standard-library.md) for APIs, limits, and
 security behavior. Bundled modules do not appear in manifests or lockfiles and
 are available offline; only `std.http` uses the network.
 
@@ -570,7 +570,7 @@ report coverage: it has no source-level execution counters.
 reports files that would change without modifying them. It normalizes block
 indentation to four spaces, preserves statement text and comments, and
 requires valid quoting and matched block structure. See the
-[formatter guide](formatter.md).
+[formatter guide](tools/formatter.md).
 
 ### Benchmarks
 
@@ -578,7 +578,7 @@ requires valid quoting and matched block structure. See the
 Python allocations, synthetic function/arithmetic/collection workloads, and
 runnable example workloads. `--runs` and `--iterations` adjust samples and
 workload size; `--json` selects machine-readable output. Traced allocations
-are not process RSS. See [runtime performance](performance.md).
+are not process RSS. See [runtime performance](tools/performance.md).
 
 ## Language server
 
@@ -591,7 +591,7 @@ manifest and checked lockfile without network access, and provides read-only
 language features for public dependency functions. The server does not execute
 source; references and rename remain limited to open documents and it does not
 index unopened project files. VS Code requires a generic LSP client extension.
-See [language server setup](language-server.md).
+See [language server setup](tools/language-server.md).
 
 ## Native C interface
 
@@ -605,7 +605,7 @@ Supported value types are `i32`, `i64`, `f64`, and `bool`; return types also
 include `void`. Arguments are passed by value using the host C calling
 convention. Pointers, strings, structures, callbacks, and ownership transfer
 are unsupported. Native code can crash or corrupt the process; call only
-trusted libraries. See the [C ABI guide](c-abi.md).
+trusted libraries. See the [C ABI guide](features/c-abi.md).
 
 ## Runtime behavior and limitations
 
@@ -656,8 +656,8 @@ that scope should be evaluated against concrete distribution needs. The C
 ABI remains the only native extension boundary; no non-C plugin mechanism is
 defined.
 
-For an introductory path, begin with the [getting-started guide](getting-started.md)
+For an introductory path, begin with the [getting-started guide](guides/getting-started.md)
 and [documentation guide](index.md), then
-refer to [built-ins](builtins.md), [projects](package-manager.md),
-[formatting](formatter.md), [installation](install.md), and
-[examples](examples.md).
+refer to [built-ins](features/builtins.md), [projects](projects/package-manager.md),
+[formatting](tools/formatter.md), [installation](setup/install.md), and
+[examples](guides/examples.md).

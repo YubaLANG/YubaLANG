@@ -7,27 +7,27 @@ Start with the [documentation guide](docs/index.md) to choose a path.
 
 ### Learn the language
 
-- [Getting started](docs/getting-started.md)
+- [Getting started](docs/guides/getting-started.md)
 - [YubaLANG 1.3 language reference](docs/1.3-docs.md)
 - [Master feature reference](docs/master-reference.md)
-- [Built-in function reference](docs/builtins.md)
-- [Standard library](docs/standard-library.md)
-- [Runnable example catalog](docs/examples.md)
+- [Built-in function reference](docs/features/builtins.md)
+- [Standard library](docs/features/standard-library.md)
+- [Runnable example catalog](docs/guides/examples.md)
 
 ### Build projects and use tools
 
-- [Projects, imports, and package management](docs/package-manager.md)
-- [Multi-module project tutorial](docs/project-tutorial.md)
-- [Formatting source files](docs/formatter.md)
-- [Language server and editor setup](docs/language-server.md)
-- [Installation](docs/install.md)
+- [Projects, imports, and package management](docs/projects/package-manager.md)
+- [Multi-module project tutorial](docs/projects/project-tutorial.md)
+- [Formatting source files](docs/tools/formatter.md)
+- [Language server and editor setup](docs/tools/language-server.md)
+- [Installation](docs/setup/install.md)
 
 ### Interoperability and release history
 
-- [Calling C functions](docs/c-abi.md)
-- [Runtime performance](docs/performance.md)
-- [1.2 to 1.3 migration notes](docs/1.3-migration.md)
-- [1.3.0 release notes](docs/1.3-release-notes.md)
+- [Calling C functions](docs/features/c-abi.md)
+- [Runtime performance](docs/tools/performance.md)
+- [1.2 to 1.3 migration notes](docs/releases/1.3-migration.md)
+- [1.3.0 release notes](docs/releases/1.3-release-notes.md)
 
 From a source checkout, run `py -3 YubaLANG.py check <file.yl>` for
 non-executing syntax and statically detectable type diagnostics. For projects,

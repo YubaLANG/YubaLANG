@@ -119,7 +119,7 @@ jobs:
           release_tag="$GITHUB_REF_NAME"
           release_version="${release_tag#v}"
           release_series="${release_version%.*}"
-          notes_file="docs/${release_series}-release-notes.md"
+          notes_file="docs/releases/${release_series}-release-notes.md"
           test -f "$notes_file"
           if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$release_tag" --repo "$GITHUB_REPOSITORY" \

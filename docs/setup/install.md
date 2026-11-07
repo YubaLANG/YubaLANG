@@ -45,7 +45,7 @@ YubaLANG package init
 ```
 
 On macOS and Linux, the executable is named `YubaLANG` (without `.exe`).
-For a guided first program, see the [getting-started guide](getting-started.md).
+For a guided first program, see the [getting-started guide](../guides/getting-started.md).
 The standalone executable bundles Python. Running from a source checkout
 requires Python 3.10 or newer; Git is required only for Git dependencies.
 Building a native C library for the FFI examples also requires a platform C
@@ -68,7 +68,7 @@ variables and functions. Multiline blocks are entered through their matching
 closing commands.
 
 Projects can be initialized and dependencies managed with `YubaLANG package`.
-See the [project and package guide](package-manager.md) for manifests,
+See the [project and package guide](../projects/package-manager.md) for manifests,
 lockfiles, imports, and path/Git dependencies.
 
 ## Unsigned releases

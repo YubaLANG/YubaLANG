@@ -1,7 +1,7 @@
 # Getting started with YubaLANG
 
 This short guide takes a new user from a source file to a checked, runnable
-program. To install a release, follow the [installation guide](install.md).
+program. To install a release, follow the [installation guide](../setup/install.md).
 
 ## 1. Create a program
 
@@ -61,15 +61,15 @@ Good job!
 Ada
 ```
 
-The runnable [getting-started example](../examples/getting-started.yl) is
+The runnable [getting-started example](../../examples/getting-started.yl) is
 kept under test with its expected output.
 
 ## 3. Continue learning
 
 - Try the interactive interpreter with `YubaLANG repl` (or
   `py -3 YubaLANG.py repl` from the checkout); enter `exit` to leave.
-- Browse the [language reference](1.3-docs.md) for commands, types, and
+- Browse the [language reference](../1.3-docs.md) for commands, types, and
   control flow.
-- Use the [examples](../examples/) as complete programs.
+- Use the [examples](../../examples/) as complete programs.
 - For a project with imports and dependencies, see the
-  [project and package guide](package-manager.md).
+  [project and package guide](../projects/package-manager.md).

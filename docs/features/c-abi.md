@@ -42,7 +42,7 @@ are reported. Call only libraries you trust.
 
 ## Example
 
-[`examples/ffi_add.c`](../examples/ffi_add.c) exports a function that adds two
+[`examples/ffi_add.c`](../../examples/ffi_add.c) exports a function that adds two
 32-bit integers. Compile it as a shared library using a C compiler:
 
 ```sh
@@ -56,7 +56,7 @@ On macOS, use `-dynamiclib` instead of `-shared` and name the output
 cl /nologo /LD examples\ffi_add.c /link /OUT:examples\libnative_add.dll
 ```
 
-Set the library filename in [`examples/ffi_add.yl`](../examples/ffi_add.yl) to
+Set the library filename in [`examples/ffi_add.yl`](../../examples/ffi_add.yl) to
 the matching platform library, then run the program from the repository root.
 It should print `42`. A C compiler is needed to build the library; the
 YubaLANG runtime itself does not compile C code.
