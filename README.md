@@ -28,6 +28,8 @@ Start with the [documentation guide](docs/index.md) to choose a path.
 - [Runtime performance](docs/tools/performance.md)
 - [1.2 to 1.3 migration notes](docs/releases/1.3-migration.md)
 - [1.3.0 release notes](docs/releases/1.3-release-notes.md)
+- [1.4 roadmap](docs/roadmap/1.4.md)
+- [YubaLANG feature backlog](docs/roadmap/features.md)
 
 From a source checkout, run `py -3 YubaLANG.py check <file.yl>` for
 non-executing syntax and statically detectable type diagnostics. For projects,

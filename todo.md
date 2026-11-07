@@ -1,214 +1,89 @@
-# YubaLANG Roadmap - 1.3.0 and Beyond
+# YubaLANG 1.4 roadmap
 
-This replaces the old 1.2 release checklist. It is a feature backlog, not a
-promise that every long-term item ships in 1.3.0. P0 items are the proposed
-1.3.0 release gate; P1 items are follow-on unless explicitly promoted into
-the release scope. Keep language/runtime responsibilities separate from YubaPKG:
-YubaPKG resolves, downloads, and installs dependencies; YubaLANG executes
-programs and imports installed packages.
+This is a proposed planning checklist, not a commitment that every candidate
+will ship in 1.4. Promote a candidate into the release scope only after its
+design, compatibility impact, and implementation size are understood. Keep
+YubaLANG runtime responsibilities separate from YubaPKG package resolution
+and installation.
 
-## P0 - 1.3.0 package-manager integration
+## Release foundations
 
-- [x] Specify and version the interface between YubaLANG and YubaPKG:
-  manifest compatibility, lockfile format, installed-package layout, and
-  runtime version requirements.
-- [x] Make project imports consume the complete locked dependency graph,
-  including transitive packages, without contacting the network.
-- [x] Ensure imports resolve to the exact package versions and locations in
-  the lockfile; report missing, modified, or inconsistent installations
-  with actionable diagnostics.
-- [x] Preserve local module, path dependency, and Git dependency behavior
-  while introducing registry-installed packages.
-- [x] Define deterministic import precedence, package namespace rules,
-  duplicate-name behavior, and cycle diagnostics across dependency graphs.
-- [x] Add cross-repository tests that use YubaPKG to install a package graph,
-  then run imports with YubaLANG both online and offline.
-- [x] Document the end-to-end workflow for installing YubaLANG and YubaPKG,
-  creating a project, adding dependencies, running, and reproducing an
-  install from a lockfile.
+- [ ] Agree on the 1.4 scope and publish the accepted feature set before
+  implementation.
+- [ ] Review open defects and user requests; prioritize by impact and
+  reproducibility rather than adding speculative syntax.
+- [ ] Turn every documented language rule and built-in into executable
+  conformance tests, including negative cases and source diagnostics.
+- [ ] Verify language, runtime, formatter, test runner, and LSP behavior
+  together for every accepted language change.
+- [ ] Run the complete test suite and release smoke tests on supported
+  Windows, Linux, and macOS targets.
+- [ ] Update the 1.4 language reference, master reference, migration notes,
+  examples, and release notes for all shipped changes.
+- [ ] Publish release artifacts and checksums, and verify clean installation,
+  project restore/import, tests, formatting, LSP startup, and supported
+  native-interoperability scenarios.
 
-## P0 - Language correctness and specification
+## Feature candidates
 
-- [x] Publish a versioned 1.3 language reference that defines current
-  behavior precisely, including syntax, evaluation order, scoping, types,
-  errors, imports, and compatibility guarantees.
-- [x] Define a formal grammar for commands, blocks, function definitions,
-  literals, identifiers, comments, and line continuation before adding
-  syntax that could conflict with existing programs.
-- [x] Replace scattered parsing and token splitting with a shared tokenizer
-  and parser that produce source-located syntax nodes; preserve 1.2 behavior
-  with compatibility tests.
-- [x] Define expression precedence and associativity, then add consistent
-  parenthesized expressions, unary operators, arithmetic, comparisons, and
-  boolean operators.
-- [x] Add expression-level assignment and return values without changing
-  existing command forms unexpectedly.
-- [x] Specify integer, floating-point, string, boolean, null/none, and
-  collection semantics, including overflow, equality, truthiness, and
-  conversion rules.
-- [x] Specify variable declaration, reassignment, shadowing, function
-  parameters, and module scope consistently.
-- [ ] Turn every documented syntax rule and built-in into executable
-  conformance tests with clear negative cases.
+### Language and data model
 
-## P1 - Core language capabilities
+- [ ] Design record methods, default field values, and construction rules.
+  Specify receiver semantics, mutation, visibility, equality, and
+  compatibility before choosing syntax.
+- [ ] Improve static type analysis where it can provide reliable value:
+  document inference limits, add focused rules, and test that diagnostics do
+  not reject valid dynamic programs.
+- [ ] Evaluate richer expression forms, such as function calls in
+  expressions, only with a grammar proposal and compatibility tests; current
+  function calls remain commands.
 
-### Functions, modules, and data modeling
+### Runtime and resource lifecycle
 
-- [x] Add explicit lexical scopes for functions and blocks, with predictable
-  variable lifetime and no accidental global leakage.
-- [x] Support closures and first-class functions with defined capture and
-  lifetime semantics.
-- [x] Expand function parameters to support named arguments and defaults with
-  defined ordering, duplicate, and missing-argument rules.
-- [x] Add a final `*name` parameter that collects extra positional arguments
-  into a tuple.
-- [x] Add a documented export/visibility model for modules instead of
-  relying only on all-functions-visible namespace behavior.
-- [x] Add user-defined records with typed field access, construction, and
-  structural equality; defer class-based extensions until semantics are set.
-- [x] Document record mutation and aliasing semantics.
-- [x] Evaluate class-based object orientation only after record, method,
-  visibility, inheritance, and initialization semantics are designed.
-- [x] Add collection indexing, safe mutation, slicing, iteration protocols,
-  and predictable behavior for missing keys and out-of-range indexes.
-- [x] Define immutable values and copying/reference behavior for collections.
+- [ ] Design a general deterministic resource-lifecycle protocol before
+  adding APIs that return resources or resource-backed iterators.
+- [ ] Decide whether concurrency and asynchronous I/O address concrete user
+  needs. If accepted, first specify cancellation, error propagation,
+  scheduling, and shared mutable state; implement async APIs only after those
+  semantics are testable.
 
-### Types and errors
+### Developer experience
 
-- [x] Design an opt-in static type-checking command with source-located
-  diagnostics and gradual adoption; keep runtime checks where static
-  information is unavailable.
-- [x] Add an opt-in `check` command and editor diagnostics for statically
-  detectable mismatches, while leaving dynamic cases to runtime.
-- [x] Define type inference from literals, annotations, and known command
-  results; support union/optional, function, and generic collection types.
-- [x] Add structured language exceptions with throw, catch, finally, and
-  source-located call frames for uncaught errors.
-- [x] Define cleanup for current resources: files close automatically at
-  program completion, with an explicit close command.
-- [x] Add deterministic cleanup when resource-backed iterators or native
-  resource types are introduced.
-- [x] Track opened files across function scopes, close them at file-run
-  completion, and add an explicit `close` command.
-- [x] Add assertions usable for function preconditions and postconditions.
-- [x] Add a source-located `assert <boolean> [message]` command.
-- [x] Check runtime result assignments against destination variable types,
-  allowing integer-to-float widening.
+- [ ] Evaluate an interactive debugger frontend over the existing debugger
+  hooks, including stepping, breakpoints, stack inspection, and variables.
+- [ ] Evaluate source-level test coverage instrumentation and report format;
+  the current process-based output test runner does not collect coverage.
+- [ ] Evaluate an LSP workspace index for unopened files, including indexing
+  performance, invalidation, and rename safety.
+- [ ] Verify the language server in at least one real editor and document the
+  supported setup.
 
-### Standard library and platform APIs
+### Projects and distribution
 
-- [x] Establish a versioned standard-library organization and API stability
-  policy.
-- [x] Add path and filesystem utilities with cross-platform path semantics,
-  safe file operations, and clear encoding behavior.
-- [x] Add date/time, random, math, structured-data, and text-encoding modules
-  with deterministic test seams where appropriate.
-- [x] Add process arguments, environment access, exit codes, and subprocess
-  APIs with explicit error handling.
-- [x] Add a documented HTTP/client API only after timeout, TLS, redirect,
-  response-size, and credential-handling rules are specified.
-- [x] Define whether asynchronous I/O is needed before expanding networking
-  or concurrent APIs.
+- [ ] Gather concrete use cases for building or bundling applications with
+  generated code or native dependencies; define reproducibility and platform
+  requirements before designing a command.
+- [ ] Keep registry resolution and installation in YubaPKG. If the
+  YubaLANG/YubaPKG interface changes, update the compatibility matrix and
+  cross-tool integration tests.
 
-### Runtime and performance
+## Explicitly gated work
 
-- [x] Profile representative startup, function, arithmetic, collection, and
-  traced-memory workloads with reproducible baselines.
-- [x] Add reproducible startup, function, arithmetic, collection, and traced
-  memory measurements.
-- [x] Reduce interpreter dispatch overhead without changing program output or
-  diagnostics.
-- [x] Cache immutable command-tokenization results and add an in-process
-  benchmark to measure interpreter execution separately from Python startup.
-- [x] Define and test the function recursion limit, large collection behavior,
-  and resource-exhaustion diagnostics.
-- [x] Enforce a 128-call user-function depth limit with a source-located
-  diagnostic.
-- [x] Report caught memory exhaustion as a source diagnostic with a
-  collection-sizing hint.
-- [x] Add reproducible startup and function-call benchmark baselines.
-- [x] Consider bytecode or a cached intermediate representation only if
-  representative benchmarks demonstrate a benefit and cache invalidation can
-  be made robust.
-- [x] Document the trust boundary for imported modules and native libraries;
-  never imply that running third-party packages is sandboxed.
-- [x] Document that imported code runs with the program's privileges and is
-  not sandboxed.
-- [x] Specify the current FFI ABI, ownership limitations, error propagation,
-  and supported platforms before broadening native interop.
-- [x] Consider a safe extension mechanism for non-C host integrations only
-  after the C ABI is stable.
+- Bytecode or compiler targets are not a 1.4 goal by default. Reconsider only
+  if representative benchmarks or distribution requirements demonstrate a
+  measurable need.
+- Class-based object orientation, inheritance, and a non-C plugin system are
+  not assumed. Require concrete use cases and a separate semantics and safety
+  proposal before adding them.
+- Broader native FFI types are not assumed. Any proposal must specify ABI
+  behavior, ownership, platform support, and process-safety limitations.
 
-## P1 - Developer tools
+## Completion criteria
 
-### Editor and language server
+A 1.4 change is complete only when its behavior is specified, tested,
+documented in the versioned and master references, covered by migration
+guidance when compatibility is affected, and validated on the platforms
+required by its scope.
 
-- [x] Add completion for commands, types, variables, and functions.
-- [x] Add signature help, references, rename, document symbols, and
-  workspace symbols for open documents.
-- [x] Add a quick fix for misspelled command names.
-- [x] Reject stale document versions and clear diagnostics/document state on
-  close.
-- [x] Support project-aware dependency imports without network activity in
-  the language server.
-- [x] Test LSP requests and protocol behavior with automated tests.
-- [ ] Verify integration in at least one real editor.
-
-### Runtime workflow
-
-- [x] Add a REPL with multiline block entry, persistent session state,
-  readable errors, and documented exit/reset behavior.
-- [x] Add debugger hooks for breakpoints, stepping, stack inspection, and
-  variable inspection if the runtime execution model can support them
-  reliably.
-- [x] Extend the test runner with filtering, structured JSON output, and
-  unified failure diffs.
-- [x] Explain why the process-based runner cannot report source coverage.
-- [x] Add a project run command that honors manifest entry points and checks
-  installed dependencies against the lockfile.
-- [x] Keep formatter behavior stable; add parser-based formatting tests for
-  every newly supported syntax form.
-
-## P1 - Documentation and onboarding
-
-- [x] Restructure documentation into a beginner path, language reference,
-  standard-library reference, project guide, and advanced interoperability
-  guides.
-- [x] Add a tutorial that builds and tests a small multi-module project and
-  adds a registry dependency through YubaPKG.
-- [x] Add runnable examples for functions, collections, file I/O, error
-  handling, modules, testing, and native interop.
-- [x] Document supported Python/runtime platforms, architectures,
-  prerequisites, and known limitations.
-- [x] Document deprecations and migration steps for each language/runtime
-  release.
-- [x] Ensure documentation examples are checked in CI or exercised by tests.
-
-## P0 - 1.3.0 quality and release
-
-- [ ] Run the complete test suite on Windows, Linux, and macOS for supported
-  Python versions.
-- [x] Add CI checks for formatting, packaging, and documentation examples.
-- [x] Add cross-repository YubaPKG integration checks.
-- [ ] Verify clean installation, project initialization, package restore,
-  imports, tests, formatting, LSP startup, and native interop where
-  supported.
-- [ ] Produce reproducible release artifacts and SHA-256 checksums; document
-  what checksums do and do not protect against.
-- [x] Maintain an explicit compatibility matrix for YubaLANG, YubaPKG,
-  manifest versions, lockfile versions, and package compatibility.
-- [x] Prepare 1.3.0 release notes and migration guidance.
-- [ ] Publish the release notes with the 1.3.0 release artifacts.
-
-## Future major-version candidates
-
-- [x] Decide whether YubaLANG remains an interpreter-only language or gains
-  a compiler/bytecode target; base the decision on measured performance and
-  distribution needs.
-- [x] Evaluate concurrency primitives and asynchronous execution with clear
-  cancellation, error, and shared-state rules.
-- [x] Evaluate a richer package/build workflow for generated code, native
-  dependencies, and reproducible application bundles.
-- [x] Define a long-term language governance and deprecation policy before
-  introducing breaking syntax or runtime behavior.
+See the [long-term YubaLANG feature backlog](docs/roadmap/features.md) for
+candidates that may fall outside 1.4.

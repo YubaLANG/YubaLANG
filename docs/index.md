@@ -47,6 +47,13 @@ master reference remain at the top level.
 - [1.2 to 1.3 migration notes](releases/1.3-migration.md).
 - [1.3.0 release notes](releases/1.3-release-notes.md).
 
+## Roadmap
+
+- [YubaLANG 1.4 roadmap](roadmap/1.4.md): proposed release work and major
+  feature candidates.
+- [YubaLANG feature backlog](roadmap/features.md): long-term language,
+  runtime, tooling, and ecosystem candidates.
+
 Standalone release executables are available for Windows x64, Linux x64,
 macOS Intel, and macOS Apple Silicon, and bundle Python. Running from source
 requires Python 3.10 or newer; Git is needed only for Git dependencies.
