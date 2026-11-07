@@ -471,15 +471,22 @@ Module-level functions are public by default. Declare a helper with
 functions in that module can still call the helper. Private visibility is
 limited to module-level functions.
 
-Projects use `yuba.json` and `yuba.lock.json`. Dependencies may refer to local
-paths or Git sources with an optional revision. Lockfile format 2 records
-resolved Git commits and each package's nested dependency graph; both package
-managers write this format, while the importer also reads legacy format-1
-lockfiles for direct dependencies. Bundled `std.*` modules resolve from the
-runtime before package or local lookup. Other imports resolve dependencies
-from the nearest package manifest; declared dependencies take precedence over
-local modules with the same name. Runtime imports validate the locked
-dependencies without network access. Commands include:
+Projects use `yuba.json` and `yuba.lock.json`. YubaLANG 1.3 accepts manifests
+targeting runtime 1.2 or 1.3 and reads lockfile formats 1, 2, and 3. Format 1
+records direct dependencies, format 2 records path/Git dependency graphs, and
+format 3 records registry releases, artifact hashes, and the complete graph.
+YubaLANG's package commands write format 2 for path/Git dependencies; YubaPKG
+writes format 3 and resolves path, Git, and registry dependencies. YubaLANG
+can validate and import already-installed registry packages from a format-3
+lockfile without network access, but does not resolve or download them. See
+the [package guide](package-manager.md#compatibility-matrix) for the complete
+compatibility matrix.
+
+Bundled `std.*` modules resolve from the runtime before package or local
+lookup. Other imports resolve dependencies from the nearest package manifest;
+declared dependencies take precedence over local modules with the same name.
+Runtime imports validate locked dependencies without network access. YubaLANG
+package commands include:
 
 ```text
 YubaLANG package init [directory]
@@ -493,11 +500,12 @@ YubaLANG package remove <name>
 ```
 
 `YubaLANG run [project-directory] [-- arguments...]` runs the manifest entry
-point and checks installed dependencies when the project declares them. The package tools
-support recursive path and Git dependencies, but not a public registry or
-semantic-version range solver. Imported modules execute with the program's
-privileges; dependencies are not sandboxed. See the
-[package guide](package-manager.md).
+point and checks installed dependencies when the project declares them.
+YubaLANG resolves path and Git dependencies; registry resolution and
+installation are handled by YubaPKG. Imported modules execute with the
+program's privileges; dependencies are not sandboxed. See the
+[package guide](package-manager.md) for registry setup and package-manager
+details.
 
 ## Standard library
 
